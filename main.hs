@@ -72,7 +72,6 @@ main = do
 
     -- Navi
     next <- runX $ doc //> nextPage
-    putStrLn ""
     putStrLn "Next Page:"
     mapM_ putStrLn next
 
@@ -80,25 +79,48 @@ main = do
     toFetch <- atomically $ newTBMChan 10
     toReturn <- atomically $ newTBMChan 10
 
-    -- We have a list of image and next page, let's fetch them.
-    runResourceT $ DCL.sourceList (map Webpage next) $$ sinkTBMChan toFetch
+    -- Pre-seed the toFetch Chan
+    atomically $ mapM_ (writeTBMChan toFetch) (map Webpage next)
+
+    -- TODO:
+    --  Need to create a source conduit that parses the data (probably started off a seed data)
+    --  When it has parsed the data and has a list of url to fetch, it feeds it into the sinkTBMChan
+    --  Which then hits fetchChan which should do the fetching then sending it back over the other chan
+    --  Then this conduit consumes from the other chan.
 
     -- Launch the threaded fetcher for running the toFetch Channel
-    forkIO $ fetchChan toFetch toReturn
+    a <- forkIO $ fetchChan toFetch toReturn
 
-    -- Read data out of the toReturn channel and do stuff with it
-    runResourceT $ sourceTBMChan toReturn $$ DCL.mapM_ (\a -> do
-            let doc = map (readString [withParseHTML yes, withWarnings no] . UL.toString) (maybeToList a)
-            next <- mapM (\b -> liftIO $ runX $ b //> nextPage) doc
-            liftIO $ putStrLn ""
-            liftIO $ putStrLn "Channel http:"
-            mapM_ (liftIO . putStrLn) (concat next)
-        )
+    -- We have a list of image and next page, let's fetch them.
+    b <- forkIO $ parseChan toReturn toFetch
+
+    threadDelay 600000000
 
 
+parseChan :: TBMChan (Maybe L.ByteString) -> TBMChan FetchType -> IO ()
+parseChan i o = runResourceT $ sourceTBMChan i $$ parsing =$ sinkTBMChan o
+
+parsing :: MonadIO m => Conduit (Maybe L.ByteString) m FetchType
+parsing = do
+    i <- await
+    case i of
+        (Just x) -> case x of
+            (Just y) -> do
+                let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString y
+                next <- liftIO $ runX $ doc //> nextPage
+                liftIO $ putStrLn ""
+                liftIO $ putStrLn "Channel http:"
+                liftIO $ mapM_ putStrLn next
+                mapM_ C.yield (map Webpage next)
+            _ -> do
+                liftIO $ putStrLn "Empty bytestring"
+                return ()
+        _ -> do
+            liftIO $ putStrLn "No more data"
+            return ()
 
 fetchChan :: TBMChan FetchType -> TBMChan (Maybe L.ByteString) -> IO ()
-fetchChan i o = runResourceT $ forever $ sourceTBMChan i $$ fetching =$ sinkTBMChan o
+fetchChan i o = runResourceT $ sourceTBMChan i $$ fetching =$ sinkTBMChan o
 
 fetching :: MonadIO m => Conduit FetchType m (Maybe L.ByteString)
 fetching = do
@@ -107,7 +129,9 @@ fetching = do
         (Just x) -> do
             val <- liftIO $ withSocketsDo $ fetcher x
             C.yield val
-        _ -> return ()
+        _ -> do
+            liftIO $ putStrLn "No more data to fetch"
+            return ()
 
 
 -- Data type of the url and any additional info needed
