@@ -81,12 +81,13 @@ main = do
 
     -- Pre-seed the toFetch Chan
     atomically $ mapM_ (writeTBMChan toFetch) (map Webpage next)
+    atomically $ mapM_ (writeTBMChan toFetch) (map Webpage next)
 
-    -- TODO:
-    --  Need to create a source conduit that parses the data (probably started off a seed data)
-    --  When it has parsed the data and has a list of url to fetch, it feeds it into the sinkTBMChan
-    --  Which then hits fetchChan which should do the fetching then sending it back over the other chan
-    --  Then this conduit consumes from the other chan.
+    -- Pre-seed the toReturn chan
+    atomically $ writeTBMChan toReturn (Just $ UL.fromString html)
+    atomically $ writeTBMChan toReturn (Just $ UL.fromString html)
+
+
 
     -- Launch the threaded fetcher for running the toFetch Channel
     a <- forkIO $ fetchChan toFetch toReturn
@@ -94,15 +95,28 @@ main = do
     -- We have a list of image and next page, let's fetch them.
     b <- forkIO $ parseChan toReturn toFetch
 
-    threadDelay 600000000
+    threadDelay 100000
 
+    a <- atomically $ isClosedTBMChan toFetch
+    putStrLn $ show a
+    a <- atomically $ isEmptyTBMChan toFetch
+    putStrLn $ show a
+    a <- atomically $ isClosedTBMChan toReturn
+    putStrLn $ show a
+    a <- atomically $ isEmptyTBMChan toReturn
+    putStrLn $ show a
+
+-- Todo
+--  May need to update these to be Sinks instead that then inserts manually into the other's chan
 
 parseChan :: TBMChan (Maybe L.ByteString) -> TBMChan FetchType -> IO ()
 parseChan i o = runResourceT $ sourceTBMChan i $$ parsing =$ sinkTBMChan o
 
 parsing :: MonadIO m => Conduit (Maybe L.ByteString) m FetchType
 parsing = do
+    liftIO $ putStrLn "1"
     i <- await
+    liftIO $ putStrLn "2"
     case i of
         (Just x) -> case x of
             (Just y) -> do
@@ -111,7 +125,7 @@ parsing = do
                 liftIO $ putStrLn ""
                 liftIO $ putStrLn "Channel http:"
                 liftIO $ mapM_ putStrLn next
-                mapM_ C.yield (map Webpage next)
+                mapM_ (\a -> C.yieldOr a (liftIO $ putStrLn "Died parsing")) (map Webpage next)
             _ -> do
                 liftIO $ putStrLn "Empty bytestring"
                 return ()
@@ -124,11 +138,13 @@ fetchChan i o = runResourceT $ sourceTBMChan i $$ fetching =$ sinkTBMChan o
 
 fetching :: MonadIO m => Conduit FetchType m (Maybe L.ByteString)
 fetching = do
+    liftIO $ putStrLn "3"
     i <- await
+    liftIO $ putStrLn "4"
     case i of
         (Just x) -> do
             val <- liftIO $ withSocketsDo $ fetcher x
-            C.yield val
+            C.yieldOr val (liftIO $ putStrLn "died fetching")
         _ -> do
             liftIO $ putStrLn "No more data to fetch"
             return ()
