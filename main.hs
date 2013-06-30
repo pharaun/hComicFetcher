@@ -35,6 +35,13 @@ import Text.XML.HXT.Core
 
 import Network
 
+import Control.Monad
+import Control.Monad.IO.Class
+import Control.Monad.STM
+import Control.Concurrent
+import Data.Conduit
+import qualified Data.Conduit.List as DCL
+import Data.Conduit.TMChan
 import Data.Conduit.Binary (sinkFile)
 import qualified Network.HTTP.Conduit as H
 import qualified Data.Conduit as C
@@ -59,35 +66,55 @@ main = do
     let doc = readString [withParseHTML yes, withWarnings no] html
 
     -- Image
-    let img = runLA (hread //> comic) html
---    img <- runX $ doc //> comic
+    img <- runX $ doc //> comic
+    putStrLn "Comics:"
     mapM_ putStrLn img
-
-
 
     -- Navi
     next <- runX $ doc //> nextPage
+    putStrLn ""
+    putStrLn "Next Page:"
     mapM_ putStrLn next
 
-    -- List of next page let's try fetching em and reading em in.
-    nextStream <- fetch (map Webpage next)
-    let doc = map (readString [withParseHTML yes, withWarnings no] . UL.toString) (catMaybes nextStream)
-    next <- mapM (\a -> runX $ a //> nextPage) doc
-    mapM_ putStrLn (concat next)
+    -- stm chans
+    toFetch <- atomically $ newTBMChan 10
+    toReturn <- atomically $ newTBMChan 10
+
+    -- We have a list of image and next page, let's fetch them.
+    runResourceT $ DCL.sourceList (map Webpage next) $$ sinkTBMChan toFetch
+
+    -- Launch the threaded fetcher for running the toFetch Channel
+    forkIO $ fetchChan toFetch toReturn
+
+    -- Read data out of the toReturn channel and do stuff with it
+    runResourceT $ sourceTBMChan toReturn $$ DCL.mapM_ (\a -> do
+            let doc = map (readString [withParseHTML yes, withWarnings no] . UL.toString) (maybeToList a)
+            next <- mapM (\b -> liftIO $ runX $ b //> nextPage) doc
+            liftIO $ putStrLn ""
+            liftIO $ putStrLn "Channel http:"
+            mapM_ (liftIO . putStrLn) (concat next)
+        )
 
 
-    putStrLn "hi"
 
+fetchChan :: TBMChan FetchType -> TBMChan (Maybe L.ByteString) -> IO ()
+fetchChan i o = runResourceT $ forever $ sourceTBMChan i $$ fetching =$ sinkTBMChan o
+
+fetching :: MonadIO m => Conduit FetchType m (Maybe L.ByteString)
+fetching = do
+    i <- await
+    case i of
+        (Just x) -> do
+            val <- liftIO $ withSocketsDo $ fetcher x
+            C.yield val
+        _ -> return ()
 
 
 -- Data type of the url and any additional info needed
 data FetchType  = Webpage String
                 | Comic String String -- Url & Filename
 
-fetch :: [FetchType] -> IO [Maybe L.ByteString]
-fetch = withSocketsDo . mapM fetcher
-
-fetcher :: FetchType -> IO (Maybe L.ByteString)
+fetcher :: MonadIO m => FetchType -> m (Maybe L.ByteString)
 fetcher (Webpage u) = do
     page <- H.simpleHttp u
     return $ Just page
