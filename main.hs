@@ -38,14 +38,13 @@ import Network
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.STM
+
+import Control.Concurrent.STM.TBMQueue
+
 import Control.Concurrent
 import Data.Conduit
-import qualified Data.Conduit.List as DCL
-import Data.Conduit.TMChan
-import Data.Conduit.Binary (sinkFile)
 import qualified Network.HTTP.Conduit as H
 import qualified Data.Conduit as C
-
 
 import qualified Data.ByteString.Lazy as L
 import qualified Data.ByteString.Lazy.UTF8 as UL
@@ -76,78 +75,47 @@ main = do
     mapM_ putStrLn next
 
     -- stm chans
-    toFetch <- atomically $ newTBMChan 10
-    toReturn <- atomically $ newTBMChan 10
+    toFetch <- atomically $ newTBMQueue 10
+    toReturn <- atomically $ newTBMQueue 10
 
-    -- Pre-seed the toFetch Chan
-    atomically $ mapM_ (writeTBMChan toFetch) (map Webpage next)
-    atomically $ mapM_ (writeTBMChan toFetch) (map Webpage next)
-
-    -- Pre-seed the toReturn chan
-    atomically $ writeTBMChan toReturn (Just $ UL.fromString html)
-    atomically $ writeTBMChan toReturn (Just $ UL.fromString html)
-
-
+    atomically $ mapM_ (writeTBMQueue toFetch) (map Webpage next)
 
     -- Launch the threaded fetcher for running the toFetch Channel
-    a <- forkIO $ fetchChan toFetch toReturn
+    forkIO $ forever $ fetchChan toFetch toReturn
 
-    -- We have a list of image and next page, let's fetch them.
-    b <- forkIO $ parseChan toReturn toFetch
+    -- Do processing by pulling off each entry off the toReturn and submitting more
+    parser toReturn toFetch
 
-    threadDelay 100000
 
-    a <- atomically $ isClosedTBMChan toFetch
-    putStrLn $ show a
-    a <- atomically $ isEmptyTBMChan toFetch
-    putStrLn $ show a
-    a <- atomically $ isClosedTBMChan toReturn
-    putStrLn $ show a
-    a <- atomically $ isEmptyTBMChan toReturn
-    putStrLn $ show a
+parser :: TBMQueue L.ByteString -> TBMQueue FetchType -> IO ()
+parser i o = do
+    -- fetch out of toReturn
+    x <- atomically $ readTBMQueue i
+    case x of
+        (Just z) -> do
+            let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString z
+            next <- runX $ doc //> nextPage
+            mapM_ putStrLn next
+            atomically $ mapM_ (writeTBMQueue o) (map Webpage next)
 
--- Todo
---  May need to update these to be Sinks instead that then inserts manually into the other's chan
+            -- Recall ourself
+            parser i o
 
-parseChan :: TBMChan (Maybe L.ByteString) -> TBMChan FetchType -> IO ()
-parseChan i o = runResourceT $ sourceTBMChan i $$ parsing =$ sinkTBMChan o
+        Nothing -> return ()
 
-parsing :: MonadIO m => Conduit (Maybe L.ByteString) m FetchType
-parsing = do
-    liftIO $ putStrLn "1"
-    i <- await
-    liftIO $ putStrLn "2"
-    case i of
-        (Just x) -> case x of
-            (Just y) -> do
-                let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString y
-                next <- liftIO $ runX $ doc //> nextPage
-                liftIO $ putStrLn ""
-                liftIO $ putStrLn "Channel http:"
-                liftIO $ mapM_ putStrLn next
-                mapM_ (\a -> C.yieldOr a (liftIO $ putStrLn "Died parsing")) (map Webpage next)
-            _ -> do
-                liftIO $ putStrLn "Empty bytestring"
-                return ()
-        _ -> do
-            liftIO $ putStrLn "No more data"
-            return ()
 
-fetchChan :: TBMChan FetchType -> TBMChan (Maybe L.ByteString) -> IO ()
-fetchChan i o = runResourceT $ sourceTBMChan i $$ fetching =$ sinkTBMChan o
-
-fetching :: MonadIO m => Conduit FetchType m (Maybe L.ByteString)
-fetching = do
-    liftIO $ putStrLn "3"
-    i <- await
-    liftIO $ putStrLn "4"
-    case i of
-        (Just x) -> do
-            val <- liftIO $ withSocketsDo $ fetcher x
-            C.yieldOr val (liftIO $ putStrLn "died fetching")
-        _ -> do
-            liftIO $ putStrLn "No more data to fetch"
-            return ()
+fetchChan :: TBMQueue FetchType -> TBMQueue L.ByteString -> IO ()
+fetchChan i o = do
+    -- Fetch the request
+    x <- atomically $ readTBMQueue i
+    case x of
+        (Just z) -> do
+            a <- fetcher z
+            case a of
+                (Just b) -> do
+                    atomically $ writeTBMQueue o b
+                Nothing -> return ()
+        Nothing -> return ()
 
 
 -- Data type of the url and any additional info needed
@@ -161,10 +129,3 @@ fetcher (Webpage u) = do
 fetcher (Comic u f) = do
     page <- H.simpleHttp u
     return $ Nothing
-
-{-
-    Simple version:
-        List of input url
-        emits into an conduit which then does http fetch stuff
-        then that either dump the file to disk or send it to hxt for parsing
--}
