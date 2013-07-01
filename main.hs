@@ -38,10 +38,11 @@ import Network
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.STM
-
-import Control.Concurrent.STM.TBMQueue
-
+import Control.Concurrent.STM.TBMChan
 import Control.Concurrent
+
+import Data.Conduit.TMChan
+
 import Data.Conduit
 import qualified Network.HTTP.Conduit as H
 import qualified Data.Conduit as C
@@ -64,14 +65,14 @@ main = do
     let seed = "http://www.exploitationnow.com/2000-07-07/9"
 
     -- Queues for processing stuff
-    toFetch <- atomically $ newTBMQueue 10
-    toReturn <- atomically $ newTBMQueue 10
+    toFetch <- atomically $ newTBMChan 10
+    toReturn <- atomically $ newTBMChan 10
 
     -- Seed with an initial page
-    atomically $ writeTBMQueue toFetch $ Webpage seed
+    atomically $ writeTBMChan toFetch $ Webpage seed
 
     -- Launch the threaded fetcher for running the toFetch Channel
-    forkIO $ forever $ fetchChan toFetch toReturn
+    forkIO $ forever $ conduitFetcher toFetch toReturn
 
     -- Do processing by pulling off each entry off the toReturn and submitting more
     untilM_ (parser toReturn toFetch) id
@@ -79,14 +80,14 @@ main = do
 
 
 
-parser :: TBMQueue L.ByteString -> TBMQueue FetchType -> IO Bool
+parser :: TBMChan L.ByteString -> TBMChan FetchType -> IO Bool
 parser i o = do
-    r <- atomically $ readTBMQueue i
+    r <- atomically $ readTBMChan i
     case r of
         (Just html) -> do
             let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
             next <- runX $ doc //> nextPage
-            atomically $ mapM_ (writeTBMQueue o) (map Webpage next)
+            atomically $ mapM_ (writeTBMChan o) (map Webpage next)
 
             -- Do we have any comic we want to store to disk?
             img <- runX $ doc //> comic
@@ -102,17 +103,27 @@ parser i o = do
         Nothing -> return False
 
 
+conduitFetcher :: TBMChan FetchType -> TBMChan L.ByteString -> IO ()
+conduitFetcher i o = runResourceT $ sourceTBMChan i $$ conduitFetch =$ sinkTBMChan o
 
-fetchChan :: TBMQueue FetchType -> TBMQueue L.ByteString -> IO ()
-fetchChan i o = do
+conduitFetch :: MonadIO m => Conduit FetchType m L.ByteString
+conduitFetch = awaitForever (\a -> do
+    b <- fetcher a
+    case b of
+        (Just c) -> C.yield c
+        Nothing  -> return ()
+    )
+
+oldFetcher :: TBMChan FetchType -> TBMChan L.ByteString -> IO ()
+oldFetcher i o = do
     -- Fetch the request
-    x <- atomically $ readTBMQueue i
+    x <- atomically $ readTBMChan i
     case x of
         (Just z) -> do
             a <- fetcher z
             case a of
                 (Just b) -> do
-                    atomically $ writeTBMQueue o b
+                    atomically $ writeTBMChan o b
                 Nothing -> return ()
         Nothing -> return ()
 
