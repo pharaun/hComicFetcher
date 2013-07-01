@@ -61,47 +61,46 @@ comic = hasAttrValue "id" (== "comic") >>> hasName "div" //> hasName "img" >>> h
 
 
 main = do
-    html <- readFile "test.html"
-    let doc = readString [withParseHTML yes, withWarnings no] html
+    let seed = "http://www.exploitationnow.com/2000-07-07/9"
 
-    -- Image
-    img <- runX $ doc //> comic
-    putStrLn "Comics:"
-    mapM_ putStrLn img
-
-    -- Navi
-    next <- runX $ doc //> nextPage
-    putStrLn "Next Page:"
-    mapM_ putStrLn next
-
-    -- stm chans
+    -- Queues for processing stuff
     toFetch <- atomically $ newTBMQueue 10
     toReturn <- atomically $ newTBMQueue 10
 
-    atomically $ mapM_ (writeTBMQueue toFetch) (map Webpage next)
+    -- Seed with an initial page
+    atomically $ writeTBMQueue toFetch $ Webpage seed
 
     -- Launch the threaded fetcher for running the toFetch Channel
     forkIO $ forever $ fetchChan toFetch toReturn
 
     -- Do processing by pulling off each entry off the toReturn and submitting more
-    parser toReturn toFetch
+    untilM_ (parser toReturn toFetch) id
 
 
-parser :: TBMQueue L.ByteString -> TBMQueue FetchType -> IO ()
+
+
+parser :: TBMQueue L.ByteString -> TBMQueue FetchType -> IO Bool
 parser i o = do
-    -- fetch out of toReturn
-    x <- atomically $ readTBMQueue i
-    case x of
-        (Just z) -> do
-            let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString z
+    r <- atomically $ readTBMQueue i
+    case r of
+        (Just html) -> do
+            let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
             next <- runX $ doc //> nextPage
-            mapM_ putStrLn next
             atomically $ mapM_ (writeTBMQueue o) (map Webpage next)
 
-            -- Recall ourself
-            parser i o
+            -- Do we have any comic we want to store to disk?
+            img <- runX $ doc //> comic
+            putStrLn "Comics:"
+            mapM_ putStrLn img
 
-        Nothing -> return ()
+            -- Print the url so we know whats up
+            mapM_ putStrLn next
+
+            -- We do want to keep going cos we just submitted another page to fetch
+            return True
+
+        Nothing -> return False
+
 
 
 fetchChan :: TBMQueue FetchType -> TBMQueue L.ByteString -> IO ()
@@ -129,3 +128,13 @@ fetcher (Webpage u) = do
 fetcher (Comic u f) = do
     page <- H.simpleHttp u
     return $ Nothing
+
+
+
+-- Execute till result is false
+untilM_ :: (Monad m) => m a -> (a -> Bool) -> m ()
+untilM_ f p = do
+    x <- f
+    if p x
+        then untilM_ f p
+        else return ()
