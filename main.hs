@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-
     1. Basic structure
         a. Fetch a comic page
@@ -48,12 +49,17 @@ import qualified Network.HTTP.Conduit as H
 import qualified Data.Conduit as C
 import Data.Conduit.Binary
 
+import qualified Data.Conduit.List as CL
+
+import qualified Data.ByteString as S
 import qualified Data.ByteString.Lazy as L
 import qualified Data.ByteString.Lazy.UTF8 as UL
 
 import Data.Maybe
 
 import qualified Control.Exception as E
+
+import Control.Failure
 
 
 -- Exploitation Now
@@ -76,13 +82,14 @@ main = do
 
     -- Launch the threaded fetcher for running the toFetch Channel
     -- TODO: refactor this into its own function
-    forkIO $ E.bracket (H.newManager H.def) H.closeManager (\manager -> withSocketsDo $ forever $ conduitFetcher manager toFetch toReturn)
+--    forkIO $ E.bracket (H.newManager H.def) H.closeManager (\manager -> withSocketsDo $ forever $ conduitFetcher manager toFetch toReturn)
 
     -- Do processing by pulling off each entry off the toReturn and submitting more
-    untilM_ (parser toReturn toFetch) id
+--    untilM_ (parser toReturn toFetch) id
 
 
-parser :: TBMChan L.ByteString -> TBMChan FetchType -> IO Bool
+
+--parser :: TBMChan L.ByteString -> TBMChan FetchType -> IO Bool
 parser i o = do
     r <- atomically $ readTBMChan i
     case r of
@@ -106,10 +113,10 @@ parser i o = do
 
 
 
-conduitFetcher :: H.Manager -> TBMChan FetchType -> TBMChan L.ByteString -> IO ()
+--conduitFetcher :: H.Manager -> TBMChan FetchType -> TBMChan L.ByteString -> IO ()
 conduitFetcher m i o = runResourceT $ sourceTBMChan i $$ conduitFetch m =$ sinkTBMChan o
 
-conduitFetch :: MonadIO m => H.Manager -> Conduit FetchType m L.ByteString
+--conduitFetch :: MonadIO m => H.Manager -> Conduit FetchType m L.ByteString
 conduitFetch m = awaitForever (\a -> do
     b <- fetcher m a
     case b of
@@ -123,21 +130,36 @@ data FetchType  = Webpage String
 
 
 
-fetcher :: MonadIO m => H.Manager -> FetchType -> m (Maybe L.ByteString)
+--fetcher :: MonadIO m => H.Manager -> FetchType -> m (Maybe L.ByteString)
 fetcher m (Webpage u) = do
-    reply <- fetchSource m u
+    reply <- H.simpleHttp u
     -- TODO: figure out how to deal with this one
     return $ Nothing
 fetcher m (Comic u f) = do
-    reply <- fetchSource m u
+--    reply <- H.simpleHttp u
     -- Stream to disk
     return $ Nothing
 
---fetchSource :: MonadIO => String -> m (Response (ResumableSource m ByteString))
+
+
+
+fetchSource :: (MonadResource m, MonadBaseControl IO m, Failure H.HttpException m) => H.Manager -> String -> m UL.ByteString
 fetchSource m url = do
     req' <- H.parseUrl url
     let req = req' { H.checkStatus = \_ _ _ -> Nothing }
-    H.http req m
+    response <- H.http req m
+    chunk <- H.responseBody response C.$$+- CL.consume
+    return $ L.fromChunks chunk
+
+fetchToDisk :: (MonadResource m, MonadBaseControl IO m, Failure H.HttpException m) => H.Manager -> String -> FilePath -> m ()
+fetchToDisk m url file = do
+    req' <- H.parseUrl url
+    let req = req' { H.checkStatus = \_ _ _ -> Nothing }
+    response <- H.http req m
+    H.responseBody response C.$$+- sinkFile file
+
+
+
 
 
 -- Execute till result is false
