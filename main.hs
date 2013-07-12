@@ -82,10 +82,17 @@ main = do
 
     -- Launch the threaded fetcher for running the toFetch Channel
     -- TODO: refactor this into its own function
---    forkIO $ E.bracket (H.newManager H.def) H.closeManager (\manager -> withSocketsDo $ forever $ conduitFetcher manager toFetch toReturn)
+--    forkIO $ E.bracket
+--        (H.newManager H.def)
+--        H.closeManager
+--        (\manager ->
+--            withSocketsDo $ runResourceT $ forever $ conduitFetcher manager toFetch toReturn
+--        )
+
+    runResourceT $ H.withManager (\manager -> withSocketsDo $ forever $ conduitFetcher manager toFetch toReturn)
 
     -- Do processing by pulling off each entry off the toReturn and submitting more
---    untilM_ (parser toReturn toFetch) id
+    untilM_ (parser toReturn toFetch) id
 
 
 
@@ -94,8 +101,10 @@ parser i o = do
     r <- atomically $ readTBMChan i
     case r of
         (Just html) -> do
+            -- HXT
             let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
             next <- runX $ doc //> nextPage
+            -- HXT
             atomically $ mapM_ (writeTBMChan o) (map Webpage next)
 
             -- Do we have any comic we want to store to disk?
@@ -114,9 +123,19 @@ parser i o = do
 
 
 --conduitFetcher :: H.Manager -> TBMChan FetchType -> TBMChan L.ByteString -> IO ()
-conduitFetcher m i o = runResourceT $ sourceTBMChan i $$ conduitFetch m =$ sinkTBMChan o
+conduitFetcher :: (
+        MonadResource m,
+        MonadBaseControl IO (ConduitM FetchType UL.ByteString m),
+        Failure H.HttpException m
+        ) => H.Manager -> TBMChan FetchType -> TBMChan UL.ByteString -> m()
+conduitFetcher m i o = sourceTBMChan i $$ conduitFetch m =$ sinkTBMChan o
 
 --conduitFetch :: MonadIO m => H.Manager -> Conduit FetchType m L.ByteString
+conduitFetch :: (
+        MonadResource m,
+        MonadBaseControl IO (ConduitM FetchType UL.ByteString m),
+        Failure H.HttpException m
+        ) => H.Manager -> ConduitM FetchType UL.ByteString m ()
 conduitFetch m = awaitForever (\a -> do
     b <- fetcher m a
     case b of
@@ -130,33 +149,48 @@ data FetchType  = Webpage String
 
 
 
---fetcher :: MonadIO m => H.Manager -> FetchType -> m (Maybe L.ByteString)
+fetcher :: (
+        MonadResource m,
+        MonadBaseControl IO m,
+        Failure H.HttpException m
+        ) => H.Manager -> FetchType -> m (Maybe UL.ByteString)
 fetcher m (Webpage u) = do
-    reply <- H.simpleHttp u
-    -- TODO: figure out how to deal with this one
-    return $ Nothing
+    reply <- fetchSource m u
+    return $ Just reply
 fetcher m (Comic u f) = do
---    reply <- H.simpleHttp u
     -- Stream to disk
+    fetchToDisk m u f
     return $ Nothing
 
 
-
-
-fetchSource :: (MonadResource m, MonadBaseControl IO m, Failure H.HttpException m) => H.Manager -> String -> m UL.ByteString
+fetchSource :: (
+        MonadResource m,
+        MonadBaseControl IO m,
+        Failure H.HttpException m
+        ) => H.Manager -> String -> m UL.ByteString
 fetchSource m url = do
-    req' <- H.parseUrl url
-    let req = req' { H.checkStatus = \_ _ _ -> Nothing }
-    response <- H.http req m
+    response <- fetchStream m url
     chunk <- H.responseBody response C.$$+- CL.consume
     return $ L.fromChunks chunk
 
-fetchToDisk :: (MonadResource m, MonadBaseControl IO m, Failure H.HttpException m) => H.Manager -> String -> FilePath -> m ()
+fetchToDisk :: (
+        MonadResource m,
+        MonadBaseControl IO m,
+        Failure H.HttpException m
+        ) => H.Manager -> String -> FilePath -> m ()
 fetchToDisk m url file = do
+    response <- fetchStream m url
+    H.responseBody response C.$$+- sinkFile file
+
+fetchStream :: (
+        MonadResource m,
+        MonadBaseControl IO m,
+        Failure H.HttpException m
+        ) => H.Manager -> String -> m (H.Response (ResumableSource m S.ByteString))
+fetchStream m url = do
     req' <- H.parseUrl url
     let req = req' { H.checkStatus = \_ _ _ -> Nothing }
-    response <- H.http req m
-    H.responseBody response C.$$+- sinkFile file
+    H.http req m
 
 
 
