@@ -55,12 +55,18 @@ import qualified Data.Conduit.List as CL
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Lazy as L
 import qualified Data.ByteString.Lazy.UTF8 as UL
+import qualified Data.ByteString.UTF8 as US
 
 import Data.Maybe
 
 import qualified Control.Exception as E
 
 import Control.Failure
+
+import Prelude hiding (FilePath)
+import Filesystem.Path.CurrentOS (FilePath, encodeString, decodeString, fromText, (</>))
+
+import Network.HTTP.Types.URI
 
 
 -- Exploitation Now
@@ -69,6 +75,9 @@ nextPage = hasName "a" >>> hasAttrValue "class" (isInfixOf "navi-next") >>> hasA
 
 comic :: (ArrowXml a) => a XmlTree String
 comic = hasAttrValue "id" (== "comic") >>> hasName "div" //> hasName "img" >>> hasAttr "src" >>> getAttrValue "src"
+
+comicFileName :: String -> FilePath
+comicFileName url = decodeString "./exploitation_now" </> (fromText $ last $ decodePathSegments $ US.fromString url)
 
 
 main = do
@@ -103,16 +112,17 @@ parser i o = do
             -- HXT
             let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
             next <- runX $ doc //> nextPage
+
+            img <- runX $ doc //> comic
             -- HXT
+
             atomically $ mapM_ (writeTBMChan o) (map Webpage next)
+            atomically $ mapM_ (writeTBMChan o) (map (\a -> Comic a $ comicFileName a) img)
 
             -- Do we have any comic we want to store to disk?
-            img <- runX $ doc //> comic
-            putStrLn "Comics:"
-            mapM_ putStrLn img
-
-            -- Print the url so we know whats up
+            putStrLn "Fetched Urls:"
             mapM_ putStrLn next
+            mapM_ putStrLn img
 
             -- We do want to keep going cos we just submitted another page to fetch
             return True
@@ -139,7 +149,7 @@ conduitFetcherList m i = CL.sourceList i $= CL.mapMaybeM (fetcher m) $$ CL.consu
 
 -- Data type of the url and any additional info needed
 data FetchType  = Webpage String
-                | Comic String String -- Url & Filename
+                | Comic String FilePath -- Url & Filename
 
 
 fetcher :: (
@@ -173,8 +183,9 @@ fetchToDisk :: (
     Failure H.HttpException m
     ) => H.Manager -> String -> FilePath -> m ()
 fetchToDisk m url file = do
+    -- TODO: Replace this with Network.HTTP.Conduit.Downloader probably for streaming file to disk
     response <- fetchStream m url
-    H.responseBody response C.$$+- sinkFile file
+    H.responseBody response C.$$+- sinkFile $ encodeString file
 
 
 fetchStream :: (
