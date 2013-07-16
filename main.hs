@@ -30,6 +30,7 @@
                 - comic
                 - volume, chapter
 -}
+import Data.Maybe
 import Data.List
 import Control.Arrow.ArrowTree
 import Text.XML.HXT.Core
@@ -94,31 +95,27 @@ main = do
 
 
 
-parser :: TBMChan (Maybe UL.ByteString) -> TBMChan FetchType -> IO Bool
+parser :: TBMChan UL.ByteString -> TBMChan FetchType -> IO Bool
 parser i o = do
     r <- atomically $ readTBMChan i
     case r of
-        (Just h) -> do
-            case h of
-                (Just html) -> do
-                    -- HXT
-                    let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
-                    next <- runX $ doc //> nextPage
-                    -- HXT
-                    atomically $ mapM_ (writeTBMChan o) (map Webpage next)
+        (Just html) -> do
+            -- HXT
+            let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
+            next <- runX $ doc //> nextPage
+            -- HXT
+            atomically $ mapM_ (writeTBMChan o) (map Webpage next)
 
-                    -- Do we have any comic we want to store to disk?
-                    img <- runX $ doc //> comic
-                    putStrLn "Comics:"
-                    mapM_ putStrLn img
+            -- Do we have any comic we want to store to disk?
+            img <- runX $ doc //> comic
+            putStrLn "Comics:"
+            mapM_ putStrLn img
 
-                    -- Print the url so we know whats up
-                    mapM_ putStrLn next
+            -- Print the url so we know whats up
+            mapM_ putStrLn next
 
-                    -- We do want to keep going cos we just submitted another page to fetch
-                    return True
-
-                Nothing -> return False
+            -- We do want to keep going cos we just submitted another page to fetch
+            return True
 
         Nothing -> return False
 
@@ -128,16 +125,16 @@ conduitFetcher :: (
     MonadBaseControl IO m,
     MonadResource m,
     Failure H.HttpException m
-    ) => H.Manager -> TBMChan FetchType -> TBMChan (Maybe UL.ByteString) -> m ()
-conduitFetcher m i o = sourceTBMChan i $= CL.mapM (fetcher m) $$ sinkTBMChan o
+    ) => H.Manager -> TBMChan FetchType -> TBMChan UL.ByteString -> m ()
+conduitFetcher m i o = sourceTBMChan i $= CL.mapM (fetcher m) $= CL.catMaybes $$ sinkTBMChan o
 
 
 conduitFetcherList :: (
     MonadBaseControl IO m,
     MonadResource m,
     Failure H.HttpException m
-    ) => H.Manager -> [FetchType] -> m [Maybe UL.ByteString]
-conduitFetcherList m i = CL.sourceList i $= CL.mapM (fetcher m) $$ CL.consume
+    ) => H.Manager -> [FetchType] -> m [UL.ByteString]
+conduitFetcherList m i = CL.sourceList i $= CL.mapM (fetcher m) $= CL.catMaybes $$ CL.consume
 
 
 -- Data type of the url and any additional info needed
