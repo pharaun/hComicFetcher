@@ -126,7 +126,7 @@ conduitFetcher :: (
     MonadResource m,
     Failure H.HttpException m
     ) => H.Manager -> TBMChan FetchType -> TBMChan UL.ByteString -> m ()
-conduitFetcher m i o = sourceTBMChan i $= CL.mapM (fetcher m) $= CL.catMaybes $$ sinkTBMChan o
+conduitFetcher m i o = sourceTBMChan i $= CL.mapMaybeM (fetcher m) $$ sinkTBMChan o
 
 
 conduitFetcherList :: (
@@ -134,7 +134,7 @@ conduitFetcherList :: (
     MonadResource m,
     Failure H.HttpException m
     ) => H.Manager -> [FetchType] -> m [UL.ByteString]
-conduitFetcherList m i = CL.sourceList i $= CL.mapM (fetcher m) $= CL.catMaybes $$ CL.consume
+conduitFetcherList m i = CL.sourceList i $= CL.mapMaybeM (fetcher m) $$ CL.consume
 
 
 -- Data type of the url and any additional info needed
