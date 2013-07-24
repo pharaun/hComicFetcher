@@ -79,6 +79,10 @@ comic = hasAttrValue "id" (== "comic") >>> hasName "div" //> hasName "img" >>> h
 comicFileName :: String -> FilePath
 comicFileName url = decodeString "./exploitation_now" </> (fromText $ last $ decodePathSegments $ US.fromString url)
 
+-- Seconds to wait between each request to this site
+fetchWaitTime :: Integer
+fetchWaitTime = 1
+
 
 main = do
     let seed = "http://www.exploitationnow.com/2000-07-07/9"
@@ -90,14 +94,8 @@ main = do
     -- Seed with an initial page
     atomically $ writeTBMChan toFetch $ Webpage seed
 
-    -- Launch the threaded fetcher for running the toFetch Channel
-    -- TODO: refactor this into its own function
-    forkIO $ E.bracket
-        (H.newManager H.def)
-        H.closeManager
-        (\manager ->
-            withSocketsDo $ runResourceT $ forever $ conduitFetcher manager toFetch toReturn
-        )
+    -- Start the fetcher
+    forkIO $ fetch toFetch toReturn
 
     -- Do processing by pulling off each entry off the toReturn and submitting more
     untilM_ (parser toReturn toFetch) id
@@ -128,6 +126,17 @@ parser i o = do
             return True
 
         Nothing -> return False
+
+
+
+fetch :: TBMChan FetchType -> TBMChan UL.ByteString -> IO ()
+fetch i o = withSocketsDo $ E.bracket
+    (H.newManager H.def)
+    H.closeManager
+    (\manager ->
+        forever $ runResourceT $ conduitFetcher manager i o
+    )
+
 
 
 
@@ -173,7 +182,7 @@ fetchSource :: (
     ) => H.Manager -> String -> m UL.ByteString
 fetchSource m url = do
     response <- fetchStream m url
-    chunk <- H.responseBody response C.$$+- CL.consume
+    chunk <- response C.$$+- CL.consume
     return $ L.fromChunks chunk
 
 
@@ -185,19 +194,26 @@ fetchToDisk :: (
 fetchToDisk m url file = do
     -- TODO: Replace this with Network.HTTP.Conduit.Downloader probably for streaming file to disk
     response <- fetchStream m url
-    H.responseBody response C.$$+- sinkFile $ encodeString file
+    response C.$$+- sinkFile $ encodeString file
 
 
 fetchStream :: (
     MonadBaseControl IO m,
     MonadResource m,
     Failure H.HttpException m
-    ) => H.Manager -> String -> m (H.Response (ResumableSource m S.ByteString))
+    ) => H.Manager -> String -> m (ResumableSource m S.ByteString)
 fetchStream m url = do
     req' <- H.parseUrl url
     let req = req' { H.checkStatus = \_ _ _ -> Nothing }
 
-    H.http req m
+    -- Caching hook here
+    response <- H.http req m
+    return $ H.responseBody response
+
+
+
+fetchStreamCache :: String -> m (ResumableSource m S.ByteString)
+fetchStreamCache = undefined
 
 
 
