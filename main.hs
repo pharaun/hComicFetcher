@@ -229,7 +229,9 @@ cacheExists = doesFileExist . FP.encodeString . cacheFile
 
 -- TODO: Define what the undefined is, i need to put in something that makes sense here.
 cacheSource :: MonadResource m => String -> m (ResumableSource m S.ByteString)
-cacheSource url = return $ IC.ResumableSource (sourceFile $ FP.encodeString $ cacheFile url) undefined
+cacheSource url = do
+    (a, b) <- (sourceFile $ FP.encodeString $ cacheFile url) C.$$+ CL.take 0
+    return a
 
 cacheSink :: MonadResource m => String -> Sink S.ByteString m ()
 cacheSink = sinkFile . FP.encodeString . cacheFile
