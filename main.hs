@@ -64,9 +64,14 @@ import qualified Control.Exception as E
 import Control.Failure
 
 import Prelude hiding (FilePath)
-import Filesystem.Path.CurrentOS (FilePath, encodeString, decodeString, fromText, (</>))
+import qualified Filesystem.Path.CurrentOS as FP
+import System.Directory (doesFileExist)
+import qualified Data.Conduit.Internal as IC
 
 import Network.HTTP.Types.URI
+
+-- Cache hash
+import Crypto.Hash
 
 
 -- Exploitation Now
@@ -76,8 +81,8 @@ nextPage = hasName "a" >>> hasAttrValue "class" (isInfixOf "navi-next") >>> hasA
 comic :: (ArrowXml a) => a XmlTree String
 comic = hasAttrValue "id" (== "comic") >>> hasName "div" //> hasName "img" >>> hasAttr "src" >>> getAttrValue "src"
 
-comicFileName :: String -> FilePath
-comicFileName url = decodeString "./exploitation_now" </> (fromText $ last $ decodePathSegments $ US.fromString url)
+comicFileName :: String -> FP.FilePath
+comicFileName url = FP.decodeString "./exploitation_now" FP.</> (FP.fromText $ last $ decodePathSegments $ US.fromString url)
 
 -- Seconds to wait between each request to this site
 fetchWaitTime :: Integer
@@ -158,7 +163,7 @@ conduitFetcherList m i = CL.sourceList i $= CL.mapMaybeM (fetcher m) $$ CL.consu
 
 -- Data type of the url and any additional info needed
 data FetchType  = Webpage String
-                | Comic String FilePath -- Url & Filename
+                | Comic String FP.FilePath -- Url & Filename
 
 
 fetcher :: (
@@ -190,11 +195,11 @@ fetchToDisk :: (
     MonadBaseControl IO m,
     MonadResource m,
     Failure H.HttpException m
-    ) => H.Manager -> String -> FilePath -> m ()
+    ) => H.Manager -> String -> FP.FilePath -> m ()
 fetchToDisk m url file = do
     -- TODO: Replace this with Network.HTTP.Conduit.Downloader probably for streaming file to disk
     response <- fetchStream m url
-    response C.$$+- sinkFile $ encodeString file
+    response C.$$+- sinkFile $ FP.encodeString file
 
 
 fetchStream :: (
@@ -207,13 +212,31 @@ fetchStream m url = do
     let req = req' { H.checkStatus = \_ _ _ -> Nothing }
 
     -- Caching hook here
-    response <- H.http req m
-    return $ H.responseBody response
+    --  1. Check for cache value
+    --  2. Return cached value if any exists, otherwise
+    --  3. Fetch the http request then stream it to the cache
+    --  4. Return cached value
 
+    exists <- liftIO $ cacheExists url
+    unless exists $ do
+        response <- H.http req m
+        H.responseBody response C.$$+- cacheSink url
 
+    cacheSource url
 
-fetchStreamCache :: String -> m (ResumableSource m S.ByteString)
-fetchStreamCache = undefined
+cacheExists :: String -> IO Bool
+cacheExists = doesFileExist . FP.encodeString . cacheFile
+
+-- TODO: Define what the undefined is, i need to put in something that makes sense here.
+cacheSource :: MonadResource m => String -> m (ResumableSource m S.ByteString)
+cacheSource url = return $ IC.ResumableSource (sourceFile $ FP.encodeString $ cacheFile url) undefined
+
+cacheSink :: MonadResource m => String -> Sink S.ByteString m ()
+cacheSink = sinkFile . FP.encodeString . cacheFile
+
+cacheFile :: String -> FP.FilePath
+cacheFile url = FP.decodeString "./cache" FP.</> (FP.decode $ digestToHexByteString $ (hash $ US.fromString url :: Digest SHA512))
+
 
 
 
