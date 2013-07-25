@@ -3,7 +3,7 @@
     1. Basic structure
         a. Fetch a comic page
         b. Store it on disk in sequence order
-        c. Close each volume/chapter such as
+        c. Close each volume/chapter such as -- TODO
             Errant Story
                 Vol 1
                     Chp 1
@@ -85,12 +85,16 @@ comicFileName :: String -> FP.FilePath
 comicFileName url = FP.decodeString "./exploitation_now" FP.</> (FP.fromText $ last $ decodePathSegments $ US.fromString url)
 
 -- Seconds to wait between each request to this site
-fetchWaitTime :: Integer
+fetchWaitTime :: Int
 fetchWaitTime = 1
+
+
+
 
 
 main = do
     let seed = "http://www.exploitationnow.com/2000-07-07/9"
+--    let seed = "http://www.exploitationnow.com/2002-08-21/303"
 
     -- Queues for processing stuff
     toFetch <- atomically $ newTBMChan 10
@@ -100,11 +104,40 @@ main = do
     atomically $ writeTBMChan toFetch $ Webpage seed
 
     -- Start the fetcher
-    forkIO $ fetch toFetch toReturn
+    threadId <- forkIO $ fetch toFetch toReturn
 
     -- Do processing by pulling off each entry off the toReturn and submitting more
     untilM_ (parser toReturn toFetch) id
+--    replicateM 10 (parser toReturn toFetch)
 
+    -- We're done kill it
+    killThread threadId
+
+
+{-
+     701,039,680 bytes allocated in the heap
+      88,742,552 bytes copied during GC
+       1,489,304 bytes maximum residency (32 sample(s))
+          57,288 bytes maximum slop
+               5 MB total memory in use (0 MB lost due to fragmentation)
+
+                                    Tot time (elapsed)  Avg pause  Max pause
+  Gen  0      1325 colls,     0 par    0.11s    0.11s     0.0001s    0.0006s
+  Gen  1        32 colls,     0 par    0.06s    0.06s     0.0020s    0.0029s
+
+  INIT    time    0.00s  (  0.00s elapsed)
+  MUT     time    0.25s  ( 10.26s elapsed)
+  GC      time    0.18s  (  0.18s elapsed)
+  EXIT    time    0.00s  (  0.00s elapsed)
+  Total   time    0.43s  ( 10.43s elapsed)
+
+  %GC     time      41.2%  (1.7% elapsed)
+
+  Alloc rate    2,804,729,796 bytes per MUT second
+
+  Productivity  58.8% of total user, 2.4% of total elapsed
+
+-}
 
 
 parser :: TBMChan UL.ByteString -> TBMChan FetchType -> IO Bool
@@ -121,6 +154,10 @@ parser i o = do
 
             atomically $ mapM_ (writeTBMChan o) (map Webpage next)
             atomically $ mapM_ (writeTBMChan o) (map (\a -> Comic a $ comicFileName a) img)
+
+            -- Terminate if we decide there's no more nextPage to fetch
+            -- This does not work if there's multiple parser/worker going but it'll be ok for this poc
+            Control.Monad.when (null next) $ atomically $ closeTBMChan o
 
             -- Do we have any comic we want to store to disk?
             putStrLn "Fetched Urls:"
@@ -139,6 +176,7 @@ fetch i o = withSocketsDo $ E.bracket
     (H.newManager H.def)
     H.closeManager
     (\manager ->
+        -- Forever loop (probably don't need the forever at all)
         forever $ runResourceT $ conduitFetcher manager i o
     )
 
@@ -178,6 +216,7 @@ fetcher m (Comic u f) = do
     -- Stream to disk
     fetchToDisk m u f
     return $ Nothing
+
 
 
 fetchSource :: (
@@ -221,6 +260,9 @@ fetchStream m url = do
     unless exists $ do
         response <- H.http req m
         H.responseBody response C.$$+- cacheSink url
+
+        -- Stall the read for the prerequest wait time before moving ahead
+        liftIO $ threadDelay $ 1000000 * fetchWaitTime
 
     cacheSource url
 
