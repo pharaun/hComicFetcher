@@ -3,6 +3,7 @@
     1. Basic structure
         a. Fetch a comic page
         b. Store it on disk in sequence order
+
         c. Close each volume/chapter such as -- TODO
             Errant Story
                 Vol 1
@@ -81,20 +82,37 @@ nextPage = hasName "a" >>> hasAttrValue "class" (isInfixOf "navi-next") >>> hasA
 comic :: (ArrowXml a) => a XmlTree String
 comic = hasAttrValue "id" (== "comic") >>> hasName "div" //> hasName "img" >>> hasAttr "src" >>> getAttrValue "src"
 
-comicFileName :: String -> FP.FilePath
-comicFileName url = FP.decodeString "./exploitation_now" FP.</> (FP.fromText $ last $ decodePathSegments $ US.fromString url)
+comicFileName :: String -> String -> FP.FilePath
+comicFileName vol url = FP.decodeString "./exploitation_now" FP.</> (FP.fromText $ last $ decodePathSegments $ US.fromString url)
+
+-- single-category-act-one
+-- single-category-act-two
+-- (empty)
+-- single-category-intermission-i
+-- single-category-act-three
+-- single-category-intermission-ii
+-- single-category-act-four
 
 -- Seconds to wait between each request to this site
 fetchWaitTime :: Int
 fetchWaitTime = 1
 
-
+-- Identify act (vol 1, 2) via body (class) - single-category-act-four ...
+whichVolChp :: (ArrowXml a) => a XmlTree String
+whichVolChp =
+    hasName "body"
+    >>> hasAttr "class"
+    >>> getAttrValue "class"
+    >>> arr words
+    >>> arr (filter (isPrefixOf "single-category"))
+    >>> arr (filter (not . isSuffixOf "comic"))
+    >>> arr (filter (not . isSuffixOf "uncategorized"))
+    >>> arr concat
 
 
 
 main = do
     let seed = "http://www.exploitationnow.com/2000-07-07/9"
---    let seed = "http://www.exploitationnow.com/2002-08-21/303"
 
     -- Queues for processing stuff
     toFetch <- atomically $ newTBMChan 10
@@ -150,10 +168,12 @@ parser i o = do
             next <- runX $ doc //> nextPage
 
             img <- runX $ doc //> comic
+
+            vol <- runX $ doc //> whichVolChp
             -- HXT
 
             atomically $ mapM_ (writeTBMChan o) (map Webpage next)
-            atomically $ mapM_ (writeTBMChan o) (map (\a -> Comic a $ comicFileName a) img)
+            atomically $ mapM_ (writeTBMChan o) (map (\a -> Comic a $ comicFileName (concat vol) a) img)
 
             -- Terminate if we decide there's no more nextPage to fetch
             -- This does not work if there's multiple parser/worker going but it'll be ok for this poc
