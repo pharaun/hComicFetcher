@@ -49,7 +49,8 @@ import Data.Conduit.TMChan
 import Data.Conduit
 import qualified Network.HTTP.Conduit as H
 import qualified Data.Conduit as C
-import Data.Conduit.Binary
+import Data.Conduit.Binary hiding (sourceFile, sinkFile)
+import Data.Conduit.Filesystem
 
 import qualified Data.Conduit.List as CL
 
@@ -65,11 +66,15 @@ import qualified Control.Exception as E
 import Control.Failure
 
 import Prelude hiding (FilePath)
-import qualified Filesystem.Path.CurrentOS as FP
-import System.Directory (doesFileExist)
+import qualified Filesystem.Path as FP
+import qualified Filesystem.Path.CurrentOS as FPO
 import qualified Data.Conduit.Internal as IC
 
+import Filesystem
+
 import Network.HTTP.Types.URI
+
+import qualified Data.Text as T
 
 -- Cache hash
 import Crypto.Hash
@@ -82,16 +87,22 @@ nextPage = hasName "a" >>> hasAttrValue "class" (isInfixOf "navi-next") >>> hasA
 comic :: (ArrowXml a) => a XmlTree String
 comic = hasAttrValue "id" (== "comic") >>> hasName "div" //> hasName "img" >>> hasAttr "src" >>> getAttrValue "src"
 
-comicFileName :: String -> String -> FP.FilePath
-comicFileName vol url = FP.decodeString "./exploitation_now" FP.</> (FP.fromText $ last $ decodePathSegments $ US.fromString url)
+comicFileName :: String -> String -> FPO.FilePath
+comicFileName vol url =
+    let base = FPO.decodeString "./exploitation_now"
+        file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
+        dirs = FPO.fromText $ T.pack $ exploitationNowVol vol
+    in base FPO.</> dirs FPO.</> file
 
--- single-category-act-one
--- single-category-act-two
--- (empty)
--- single-category-intermission-i
--- single-category-act-three
--- single-category-intermission-ii
--- single-category-act-four
+exploitationNowVol :: String -> String
+exploitationNowVol "single-category-act-one"         = "vol-1_act-one"
+exploitationNowVol "single-category-act-two"         = "vol-2_act-two"
+exploitationNowVol ""                                = "vol-3"
+exploitationNowVol "single-category-intermission-i"  = "vol-4_intermission-I"
+exploitationNowVol "single-category-act-three"       = "vol-5_act-three"
+exploitationNowVol "single-category-intermission-ii" = "vol-6_intermission-II"
+exploitationNowVol "single-category-act-four"        = "vol-7_act-four"
+exploitationNowVol _ = "Unknown"
 
 -- Seconds to wait between each request to this site
 fetchWaitTime :: Int
@@ -221,7 +232,7 @@ conduitFetcherList m i = CL.sourceList i $= CL.mapMaybeM (fetcher m) $$ CL.consu
 
 -- Data type of the url and any additional info needed
 data FetchType  = Webpage String
-                | Comic String FP.FilePath -- Url & Filename
+                | Comic String FPO.FilePath -- Url & Filename
 
 
 fetcher :: (
@@ -254,11 +265,15 @@ fetchToDisk :: (
     MonadBaseControl IO m,
     MonadResource m,
     Failure H.HttpException m
-    ) => H.Manager -> String -> FP.FilePath -> m ()
+    ) => H.Manager -> String -> FPO.FilePath -> m ()
 fetchToDisk m url file = do
     -- TODO: Replace this with Network.HTTP.Conduit.Downloader probably for streaming file to disk
     response <- fetchStream m url
-    response C.$$+- sinkFile $ FP.encodeString file
+
+    -- Let's create the directory tree if it does not exist first
+    liftIO $ createTree $ FP.directory file
+
+    response C.$$+- sinkFile file
 
 
 fetchStream :: (
@@ -287,19 +302,25 @@ fetchStream m url = do
     cacheSource url
 
 cacheExists :: String -> IO Bool
-cacheExists = doesFileExist . FP.encodeString . cacheFile
+cacheExists = isFile . cacheFile
 
--- TODO: Define what the undefined is, i need to put in something that makes sense here.
 cacheSource :: MonadResource m => String -> m (ResumableSource m S.ByteString)
 cacheSource url = do
-    (a, b) <- (sourceFile $ FP.encodeString $ cacheFile url) C.$$+ CL.take 0
+    (a, b) <- (sourceFile $ cacheFile url) C.$$+ CL.take 0
     return a
 
 cacheSink :: MonadResource m => String -> Sink S.ByteString m ()
-cacheSink = sinkFile . FP.encodeString . cacheFile
+cacheSink url = do
+    let fp = cacheFile url
 
-cacheFile :: String -> FP.FilePath
-cacheFile url = FP.decodeString "./cache" FP.</> (FP.decode $ digestToHexByteString $ (hash $ US.fromString url :: Digest SHA512))
+    -- Let's create the cache if it does not exist.
+    liftIO $ createTree $ FP.directory fp
+
+    sinkFile fp
+
+
+cacheFile :: String -> FPO.FilePath
+cacheFile url = FPO.decodeString "./cache" FPO.</> (FPO.decode $ digestToHexByteString $ (hash $ US.fromString url :: Digest SHA512))
 
 
 
