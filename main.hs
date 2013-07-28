@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, Rank2Types #-}
 {-
     1. Basic structure
         a. Fetch a comic page
@@ -20,6 +20,7 @@
         b. automated downloading of a series to disk
         c. Storing them into cbz latter on or extracting to that
         d. Ability to restart/queue from any point in the download process
+        e. Store any additional metadata (alt text, notes, etc)
 
     3. Requirements?
         a. Identify what qualifies as a Volume, Chapter, Page
@@ -79,20 +80,48 @@ import qualified Data.Text as T
 -- Cache hash
 import Crypto.Hash
 
+-- Seconds to wait between each request to this site
+fetchWaitTime :: Int
+fetchWaitTime = 1
+
+-- Records for all of the site to scrap from
+data Comic = Comic
+    { comicName :: String
+    , seedPage :: String
+    , nextPage :: (ArrowXml a) => a XmlTree String
+    , comic :: (ArrowXml a) => a XmlTree String
+    , comicFileName :: String -> String -> FPO.FilePath
+    -- Identify act (vol 1, 2) via body (class) - single-category-act-four ...
+    , whichVolChp :: (ArrowXml a) => a XmlTree String
+    }
+
 
 -- Exploitation Now
-nextPage :: (ArrowXml a) => a XmlTree String
-nextPage = hasName "a" >>> hasAttrValue "class" (isInfixOf "navi-next") >>> hasAttr "href" >>> getAttrValue "href"
+exploitationNow = Comic
+    { comicName = "Exploitation Now"
+    , seedPage = "http://www.exploitationnow.com/2000-07-07/9"
+    , nextPage = hasName "a" >>> hasAttrValue "class" (isInfixOf "navi-next") >>> hasAttr "href" >>> getAttrValue "href"
+    , comic = hasAttrValue "id" (== "comic") >>> hasName "div" //> hasName "img" >>> hasAttr "src" >>> getAttrValue "src"
+    , comicFileName = \vol url ->
+        let base = FPO.decodeString "./exploitation_now"
+            file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
+            dirs = FPO.fromText $ T.pack $ exploitationNowVol vol
+        in base FPO.</> dirs FPO.</> file
+    , whichVolChp =
+        hasName "body"
+        >>> hasAttr "class"
+        >>> getAttrValue "class"
+        >>> arr words
+        >>> arr (filter (isPrefixOf "single-category"))
+        >>> arr (filter (not . isSuffixOf "comic"))
+        >>> arr (filter (not . isSuffixOf "uncategorized"))
+        >>> arr concat
+    }
 
-comic :: (ArrowXml a) => a XmlTree String
-comic = hasAttrValue "id" (== "comic") >>> hasName "div" //> hasName "img" >>> hasAttr "src" >>> getAttrValue "src"
+-- Does Not Play Well With Others
+doesNotPlayWellWithOthers = exploitationNow
 
-comicFileName :: String -> String -> FPO.FilePath
-comicFileName vol url =
-    let base = FPO.decodeString "./exploitation_now"
-        file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
-        dirs = FPO.fromText $ T.pack $ exploitationNowVol vol
-    in base FPO.</> dirs FPO.</> file
+
 
 exploitationNowVol :: String -> String
 exploitationNowVol "single-category-act-one"         = "vol-1_act-one"
@@ -104,39 +133,22 @@ exploitationNowVol "single-category-intermission-ii" = "vol-6_intermission-II"
 exploitationNowVol "single-category-act-four"        = "vol-7_act-four"
 exploitationNowVol _ = "Unknown"
 
--- Seconds to wait between each request to this site
-fetchWaitTime :: Int
-fetchWaitTime = 1
-
--- Identify act (vol 1, 2) via body (class) - single-category-act-four ...
-whichVolChp :: (ArrowXml a) => a XmlTree String
-whichVolChp =
-    hasName "body"
-    >>> hasAttr "class"
-    >>> getAttrValue "class"
-    >>> arr words
-    >>> arr (filter (isPrefixOf "single-category"))
-    >>> arr (filter (not . isSuffixOf "comic"))
-    >>> arr (filter (not . isSuffixOf "uncategorized"))
-    >>> arr concat
-
-
 
 main = do
-    let seed = "http://www.exploitationnow.com/2000-07-07/9"
+    let target = doesNotPlayWellWithOthers
 
     -- Queues for processing stuff
     toFetch <- atomically $ newTBMChan 10
     toReturn <- atomically $ newTBMChan 10
 
     -- Seed with an initial page
-    atomically $ writeTBMChan toFetch $ Webpage seed
+    atomically $ writeTBMChan toFetch $ Webpage (seedPage target)
 
     -- Start the fetcher
     threadId <- forkIO $ fetch toFetch toReturn
 
     -- Do processing by pulling off each entry off the toReturn and submitting more
-    untilM_ (parser toReturn toFetch) id
+    untilM_ (parser target toReturn toFetch) id
 --    replicateM 10 (parser toReturn toFetch)
 
     -- We're done kill it
@@ -169,22 +181,22 @@ main = do
 -}
 
 
-parser :: TBMChan UL.ByteString -> TBMChan FetchType -> IO Bool
-parser i o = do
+parser :: Comic -> TBMChan UL.ByteString -> TBMChan FetchType -> IO Bool
+parser c i o = do
     r <- atomically $ readTBMChan i
     case r of
         (Just html) -> do
             -- HXT
             let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
-            next <- runX $ doc //> nextPage
+            next <- runX $ doc //> (nextPage c)
 
-            img <- runX $ doc //> comic
+            img <- runX $ doc //> (comic c)
 
-            vol <- runX $ doc //> whichVolChp
+            vol <- runX $ doc //> (whichVolChp c)
             -- HXT
 
             atomically $ mapM_ (writeTBMChan o) (map Webpage next)
-            atomically $ mapM_ (writeTBMChan o) (map (\a -> Comic a $ comicFileName (concat vol) a) img)
+            atomically $ mapM_ (writeTBMChan o) (map (\a -> Image a $ (comicFileName c) (concat vol) a) img)
 
             -- Terminate if we decide there's no more nextPage to fetch
             -- This does not work if there's multiple parser/worker going but it'll be ok for this poc
@@ -232,7 +244,7 @@ conduitFetcherList m i = CL.sourceList i $= CL.mapMaybeM (fetcher m) $$ CL.consu
 
 -- Data type of the url and any additional info needed
 data FetchType  = Webpage String
-                | Comic String FPO.FilePath -- Url & Filename
+                | Image String FPO.FilePath -- Url & Filename
 
 
 fetcher :: (
@@ -243,7 +255,7 @@ fetcher :: (
 fetcher m (Webpage u) = do
     reply <- fetchSource m u
     return $ Just reply
-fetcher m (Comic u f) = do
+fetcher m (Image u f) = do
     -- Stream to disk
     fetchToDisk m u f
     return $ Nothing
