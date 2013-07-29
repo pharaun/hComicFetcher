@@ -31,6 +31,9 @@
                 - nextPage
                 - comic
                 - volume, chapter
+
+    4. TODO:
+        a. If cancel/exit, should delete/re-download the corrupt file
 -}
 import Data.Maybe
 import Data.List
@@ -96,6 +99,10 @@ data Comic = Comic
     }
 
 
+--
+-- SEQUAL SCAN COMICS
+--
+
 -- Exploitation Now
 exploitationNow = Comic
     { comicName = "Exploitation Now"
@@ -114,14 +121,20 @@ exploitationNow = Comic
         >>> arr words
         >>> arr (filter (isPrefixOf "single-category"))
         >>> arr (filter (not . isSuffixOf "comic"))
+        >>> arr (filter (not . isSuffixOf "comics"))
         >>> arr (filter (not . isSuffixOf "uncategorized"))
         >>> arr concat
     }
 
 -- Does Not Play Well With Others
 doesNotPlayWellWithOthers = exploitationNow
-
-
+    { comicName = "Does Not Play Well With Others"
+    , seedPage = "http://www.doesnotplaywellwithothers.com/comics/pwc-000f"
+    , comicFileName = \vol url ->
+        let base = FPO.decodeString "./does_not_play_well_with_others"
+            file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
+        in base FPO.</> file
+    }
 
 exploitationNowVol :: String -> String
 exploitationNowVol "single-category-act-one"         = "vol-1_act-one"
@@ -134,8 +147,149 @@ exploitationNowVol "single-category-act-four"        = "vol-7_act-four"
 exploitationNowVol _ = "Unknown"
 
 
+--
+-- INDEX BASED COMIC
+--
+
+-- Errant Story
+--  <li id="categories-412160671" class="widget widget_categories"><h2 class="widgettitle">Archives</h2>
+--  <select name='cat' id='cat' class='postform' >
+--  <option value='-1'>Select Category</option>
+--  <option class="level-0" value="7">Blog</option>
+--  <option class="level-0" value="6">Comics</option>
+--  <option class="level-1" value="129">Errant Story</option>
+--  <option class="level-2" value="131">Chronicles of Heretic Knowledge</option>
+--  <option class="level-2" value="9">Errant Commentary</option>
+--  <option class="level-2" value="137">Guest Comics</option>
+--  <option class="level-2" value="59">Volume 1</option>
+--  <option class="level-3" value="25">Chapter 00 (Prologue)</option>
+--  <option class="level-3" value="24">Chapter 01</option>
+--  <option class="level-3" value="23">Chapter 02</option>
+--  <option class="level-3" value="26">Chapter 03</option>
+--  <option class="level-3" value="27">Chapter 04</option>
+--  <option class="level-2" value="58">Volume 2</option>
+--  <option class="level-3" value="30">Chapter 05</option>
+--  <option class="level-3" value="29">Chapter 06</option>
+--  <option class="level-3" value="28">Chapter 07</option>
+--  <option class="level-3" value="22">Chapter 08</option>
+--  <option class="level-3" value="31">Chapter 09</option>
+--  <option class="level-3" value="21">Chapter 10</option>
+--  <option class="level-2" value="57">Volume 3</option>
+--  <option class="level-3" value="14">Chapter 11</option>
+--  <option class="level-3" value="15">Chapter 12</option>
+--  <option class="level-3" value="13">Chapter 13</option>
+--  <option class="level-3" value="16">Chapter 14</option>
+--  <option class="level-3" value="20">Chapter 15</option>
+--  <option class="level-3" value="19">Chapter 16</option>
+--  <option class="level-3" value="18">Chapter 17</option>
+--  <option class="level-3" value="17">Chapter 18</option>
+--  <option class="level-2" value="56">Volume 4</option>
+--  <option class="level-3" value="46">Chapter 19</option>
+--  <option class="level-3" value="45">Chapter 20</option>
+--  <option class="level-3" value="44">Chapter 21</option>
+--  <option class="level-3" value="47">Chapter 22</option>
+--  <option class="level-3" value="48">Chapter 23</option>
+--  <option class="level-3" value="51">Chapter 24</option>
+--  <option class="level-3" value="50">Chapter 25</option>
+--  <option class="level-3" value="49">Chapter 26</option>
+--  <option class="level-2" value="54">Volume 5</option>
+--  <option class="level-3" value="52">Chapter 27</option>
+--  <option class="level-3" value="43">Chapter 28</option>
+--  <option class="level-3" value="42">Chapter 29</option>
+--  <option class="level-3" value="35">Chapter 30</option>
+--  <option class="level-3" value="34">Chapter 31</option>
+--  <option class="level-3" value="33">Chapter 32</option>
+--  <option class="level-3" value="36">Chapter 33</option>
+--  <option class="level-3" value="37">Chapter 34</option>
+--  <option class="level-2" value="55">Volume 6</option>
+--  <option class="level-3" value="41">Chapter 35</option>
+--  <option class="level-3" value="40">Chapter 36</option>
+--  <option class="level-3" value="39">Chapter 37</option>
+--  <option class="level-3" value="38">Chapter 38</option>
+--  <option class="level-3" value="53">Chapter 39</option>
+--  <option class="level-3" value="96">Chapter 40</option>
+--  <option class="level-3" value="104">Chapter 41</option>
+--  <option class="level-3" value="112">Chapter 42</option>
+--  <option class="level-2" value="103">Volume 7</option>
+--  <option class="level-3" value="120">Chapter 43</option>
+--  <option class="level-3" value="124">Chapter 44</option>
+--  <option class="level-3" value="128">Chapter 45</option>
+--  <option class="level-3" value="130">Chapter 46</option>
+--  <option class="level-3" value="132">Chapter 47</option>
+--  <option class="level-3" value="134">Chapter 48</option>
+--  <option class="level-3" value="140">Chapter 49</option>
+--  <option class="level-3" value="143">Chapter 50</option>
+--  <option class="level-3" value="144">Chapter 51 (Epilogue)</option>
+--  <option class="level-1" value="147">Errant Story Commentary Track</option>
+--  <option class="level-2" value="148">Volume 1 CT</option>
+--  <option class="level-3" value="149">Chapter 00 (Prologue) CT</option>
+--  <option class="level-3" value="150">Chapter 01 CT</option>
+--  <option class="level-3" value="152">Chapter 02 CT</option>
+--  <option class="level-3" value="153">Chapter 03 CT</option>
+--  <option class="level-3" value="154">Chapter 04 CT</option>
+--  <option class="level-3" value="160">Chapter 05 CT</option>
+--  <option class="level-3" value="157">Chapter 06 CT</option>
+--  <option class="level-3" value="158">Chapter 07 CT</option>
+--  <option class="level-3" value="159">Chapter 08 CT</option>
+--  <option class="level-2" value="155">Volume 2 CT</option>
+--  <option class="level-3" value="161">Chapter 09 CT</option>
+--  <option class="level-3" value="162">Chapter 10 CT</option>
+--  <option class="level-0" value="1">Uncategorized</option>
+--  </select>
+--  <script type='text/javascript'>
+--  /* <![CDATA[ */
+--  var dropdown = document.getElementById("cat");
+--  function onCatChange() {
+--  if ( dropdown.options[dropdown.selectedIndex].value > 0 ) {
+--  location.href = "http://www.errantstory.com/?cat="+dropdown.options[dropdown.selectedIndex].value;
+--  }
+--  }
+--  dropdown.onchange = onCatChange;
+--  /* ]]> */
+--  </script>
+--    { comicName :: String
+--    , seedPage :: String
+--    , nextPage :: (ArrowXml a) => a XmlTree String
+--    , comic :: (ArrowXml a) => a XmlTree String
+--    , comicFileName :: String -> String -> FPO.FilePath
+--    -- Identify act (vol 1, 2) via body (class) - single-category-act-four ...
+--    , whichVolChp :: (ArrowXml a) => a XmlTree String
+--    }
+-- TODO:
+--  * The page by page works for a raw dump but it does not work for vol/chp/etc
+--  * Need to work/create an indexer that will walk the vol/chp tree of the archive
+errantStory = Comic
+    { comicName = "Errant Story"
+    , seedPage = "http://www.errantstory.com/2002-11-04/15"
+    , nextPage =
+        hasName "h4"
+        >>> hasAttrValue "class" (isInfixOf "nav-next")
+        >>> getChildren
+        >>> hasName "a"
+        >>> hasAttr "href"
+        >>> getAttrValue "href"
+    , comic = hasAttrValue "id" (== "comic") >>> hasName "div" //> hasName "img" >>> hasAttr "src" >>> getAttrValue "src"
+    , comicFileName = \vol url ->
+        let base = FPO.decodeString "./errant_story"
+            file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
+        in base FPO.</> file
+    , whichVolChp =
+        hasName "body"
+        >>> hasAttr "class"
+        >>> getAttrValue "class"
+        >>> arr words
+        >>> arr (filter (isPrefixOf "single-category"))
+        >>> arr (filter (not . isSuffixOf "comic"))
+        >>> arr (filter (not . isSuffixOf "comics"))
+        >>> arr (filter (not . isSuffixOf "uncategorized"))
+        >>> arr concat
+    }
+
+
+-- TODO:
+--  - Defined stop point, Errant Story
 main = do
-    let target = doesNotPlayWellWithOthers
+    let target = errantStory
 
     -- Queues for processing stuff
     toFetch <- atomically $ newTBMChan 10
@@ -181,6 +335,10 @@ main = do
 -}
 
 
+-- LINEAR comic parser/scanner
+-- TODO:
+--  * Make this work with indexed comic, if not need a second type
+--  * look into some form of state transformer monad for tracking state between parse run if needed
 parser :: Comic -> TBMChan UL.ByteString -> TBMChan FetchType -> IO Bool
 parser c i o = do
     r <- atomically $ readTBMChan i
@@ -195,22 +353,30 @@ parser c i o = do
             vol <- runX $ doc //> (whichVolChp c)
             -- HXT
 
-            atomically $ mapM_ (writeTBMChan o) (map Webpage next)
+            -- Errant Story (Bail out when the next webpage matches this)
+            let filteredNext = filter (/= "http://www.errantstory.com/2012-03-23/5460") next
+
+            atomically $ mapM_ (writeTBMChan o) (map Webpage filteredNext)
             atomically $ mapM_ (writeTBMChan o) (map (\a -> Image a $ (comicFileName c) (concat vol) a) img)
 
             -- Terminate if we decide there's no more nextPage to fetch
             -- This does not work if there's multiple parser/worker going but it'll be ok for this poc
-            Control.Monad.when (null next) $ atomically $ closeTBMChan o
+            Control.Monad.when (null filteredNext) $ atomically $ closeTBMChan o
 
             -- Do we have any comic we want to store to disk?
             putStrLn "Fetched Urls:"
-            mapM_ putStrLn next
             mapM_ putStrLn img
+            mapM_ putStrLn filteredNext
+
+            putStrLn "vol:"
+            mapM_ putStrLn vol
 
             -- We do want to keep going cos we just submitted another page to fetch
             return True
 
         Nothing -> return False
+
+
 
 
 
