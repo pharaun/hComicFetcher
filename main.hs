@@ -151,102 +151,7 @@ exploitationNowVol _ = "Unknown"
 -- INDEX BASED COMIC
 --
 
--- Errant Story
---  <li id="categories-412160671" class="widget widget_categories"><h2 class="widgettitle">Archives</h2>
---  <select name='cat' id='cat' class='postform' >
---  <option value='-1'>Select Category</option>
---  <option class="level-0" value="7">Blog</option>
---  <option class="level-0" value="6">Comics</option>
---  <option class="level-1" value="129">Errant Story</option>
---  <option class="level-2" value="131">Chronicles of Heretic Knowledge</option>
---  <option class="level-2" value="9">Errant Commentary</option>
---  <option class="level-2" value="137">Guest Comics</option>
---  <option class="level-2" value="59">Volume 1</option>
---  <option class="level-3" value="25">Chapter 00 (Prologue)</option>
---  <option class="level-3" value="24">Chapter 01</option>
---  <option class="level-3" value="23">Chapter 02</option>
---  <option class="level-3" value="26">Chapter 03</option>
---  <option class="level-3" value="27">Chapter 04</option>
---  <option class="level-2" value="58">Volume 2</option>
---  <option class="level-3" value="30">Chapter 05</option>
---  <option class="level-3" value="29">Chapter 06</option>
---  <option class="level-3" value="28">Chapter 07</option>
---  <option class="level-3" value="22">Chapter 08</option>
---  <option class="level-3" value="31">Chapter 09</option>
---  <option class="level-3" value="21">Chapter 10</option>
---  <option class="level-2" value="57">Volume 3</option>
---  <option class="level-3" value="14">Chapter 11</option>
---  <option class="level-3" value="15">Chapter 12</option>
---  <option class="level-3" value="13">Chapter 13</option>
---  <option class="level-3" value="16">Chapter 14</option>
---  <option class="level-3" value="20">Chapter 15</option>
---  <option class="level-3" value="19">Chapter 16</option>
---  <option class="level-3" value="18">Chapter 17</option>
---  <option class="level-3" value="17">Chapter 18</option>
---  <option class="level-2" value="56">Volume 4</option>
---  <option class="level-3" value="46">Chapter 19</option>
---  <option class="level-3" value="45">Chapter 20</option>
---  <option class="level-3" value="44">Chapter 21</option>
---  <option class="level-3" value="47">Chapter 22</option>
---  <option class="level-3" value="48">Chapter 23</option>
---  <option class="level-3" value="51">Chapter 24</option>
---  <option class="level-3" value="50">Chapter 25</option>
---  <option class="level-3" value="49">Chapter 26</option>
---  <option class="level-2" value="54">Volume 5</option>
---  <option class="level-3" value="52">Chapter 27</option>
---  <option class="level-3" value="43">Chapter 28</option>
---  <option class="level-3" value="42">Chapter 29</option>
---  <option class="level-3" value="35">Chapter 30</option>
---  <option class="level-3" value="34">Chapter 31</option>
---  <option class="level-3" value="33">Chapter 32</option>
---  <option class="level-3" value="36">Chapter 33</option>
---  <option class="level-3" value="37">Chapter 34</option>
---  <option class="level-2" value="55">Volume 6</option>
---  <option class="level-3" value="41">Chapter 35</option>
---  <option class="level-3" value="40">Chapter 36</option>
---  <option class="level-3" value="39">Chapter 37</option>
---  <option class="level-3" value="38">Chapter 38</option>
---  <option class="level-3" value="53">Chapter 39</option>
---  <option class="level-3" value="96">Chapter 40</option>
---  <option class="level-3" value="104">Chapter 41</option>
---  <option class="level-3" value="112">Chapter 42</option>
---  <option class="level-2" value="103">Volume 7</option>
---  <option class="level-3" value="120">Chapter 43</option>
---  <option class="level-3" value="124">Chapter 44</option>
---  <option class="level-3" value="128">Chapter 45</option>
---  <option class="level-3" value="130">Chapter 46</option>
---  <option class="level-3" value="132">Chapter 47</option>
---  <option class="level-3" value="134">Chapter 48</option>
---  <option class="level-3" value="140">Chapter 49</option>
---  <option class="level-3" value="143">Chapter 50</option>
---  <option class="level-3" value="144">Chapter 51 (Epilogue)</option>
---  <option class="level-1" value="147">Errant Story Commentary Track</option>
---  <option class="level-2" value="148">Volume 1 CT</option>
---  <option class="level-3" value="149">Chapter 00 (Prologue) CT</option>
---  <option class="level-3" value="150">Chapter 01 CT</option>
---  <option class="level-3" value="152">Chapter 02 CT</option>
---  <option class="level-3" value="153">Chapter 03 CT</option>
---  <option class="level-3" value="154">Chapter 04 CT</option>
---  <option class="level-3" value="160">Chapter 05 CT</option>
---  <option class="level-3" value="157">Chapter 06 CT</option>
---  <option class="level-3" value="158">Chapter 07 CT</option>
---  <option class="level-3" value="159">Chapter 08 CT</option>
---  <option class="level-2" value="155">Volume 2 CT</option>
---  <option class="level-3" value="161">Chapter 09 CT</option>
---  <option class="level-3" value="162">Chapter 10 CT</option>
---  <option class="level-0" value="1">Uncategorized</option>
---  </select>
---  <script type='text/javascript'>
---  /* <![CDATA[ */
---  var dropdown = document.getElementById("cat");
---  function onCatChange() {
---  if ( dropdown.options[dropdown.selectedIndex].value > 0 ) {
---  location.href = "http://www.errantstory.com/?cat="+dropdown.options[dropdown.selectedIndex].value;
---  }
---  }
---  dropdown.onchange = onCatChange;
---  /* ]]> */
---  </script>
+
 --    { comicName :: String
 --    , seedPage :: String
 --    , nextPage :: (ArrowXml a) => a XmlTree String
@@ -260,7 +165,9 @@ exploitationNowVol _ = "Unknown"
 --  * Need to work/create an indexer that will walk the vol/chp tree of the archive
 errantStory = Comic
     { comicName = "Errant Story"
-    , seedPage = "http://www.errantstory.com/2002-11-04/15"
+--    , seedPage = "http://www.errantstory.com/2002-11-04/15"
+--    , seedPage = "http://www.errantstory.com/category/comics/errant-story/v-01/prologue"
+    , seedPage = "http://www.errantstory.com/category/comics/errant-story/v-01/chapter-04"
     , nextPage =
         hasName "h4"
         >>> hasAttrValue "class" (isInfixOf "nav-next")
@@ -302,37 +209,98 @@ main = do
     threadId <- forkIO $ fetch toFetch toReturn
 
     -- Do processing by pulling off each entry off the toReturn and submitting more
-    untilM_ (parser target toReturn toFetch) id
---    replicateM 10 (parser toReturn toFetch)
+--    untilM_ (parser target toReturn toFetch) id
+    untilM_ (indexedParser target toReturn toFetch) id
 
     -- We're done kill it
     killThread threadId
 
 
-{-
-     701,039,680 bytes allocated in the heap
-      88,742,552 bytes copied during GC
-       1,489,304 bytes maximum residency (32 sample(s))
-          57,288 bytes maximum slop
-               5 MB total memory in use (0 MB lost due to fragmentation)
 
-                                    Tot time (elapsed)  Avg pause  Max pause
-  Gen  0      1325 colls,     0 par    0.11s    0.11s     0.0001s    0.0006s
-  Gen  1        32 colls,     0 par    0.06s    0.06s     0.0020s    0.0029s
+--indexList :: (ArrowXml a) => a XmlTree [String]
+indexList =
+    hasName "select"
+    >>> hasAttrValue "id" (isInfixOf "cat")
+    >>> getChildren
+    >>> hasName "option"
+    >>> hasAttrValue "class" (/= "level-0") -- Filter first level
+    >>> hasAttrValue "value" (/= "131") -- History
+    >>> hasAttrValue "value" (/= "9") -- Commentary
+    >>> hasAttrValue "value" (/= "137") -- Guest Comics
+    >>> (
+        (getAttrValue "value" >>> arr ("http://www.errantstory.com/?cat=" ++))
+        &&&
+            (
+            getAttrValue "class"
+            &&&
+            (getChildren >>> getText >>> arr (filter (/= '\160')))
+            )
+        )
 
-  INIT    time    0.00s  (  0.00s elapsed)
-  MUT     time    0.25s  ( 10.26s elapsed)
-  GC      time    0.18s  (  0.18s elapsed)
-  EXIT    time    0.00s  (  0.00s elapsed)
-  Total   time    0.43s  ( 10.43s elapsed)
 
-  %GC     time      41.2%  (1.7% elapsed)
+--chapterList :: (ArrowXml a) => a XmlTree String
+chapterList =
+    hasName "div"
+    >>> hasAttrValue "class" (isInfixOf "comicarchiveframe")
+    >>> getChildren
+    >>> hasName "a"
+    >>> hasAttr "href"
+    >>> (
+        getAttrValue "href"
+        &&&
+            (
+            getChildren
+            >>> hasName "img"
+            >>> hasAttr "alt"
+            >>> getAttrValue "alt"
+            )
+        )
 
-  Alloc rate    2,804,729,796 bytes per MUT second
 
-  Productivity  58.8% of total user, 2.4% of total elapsed
+indexNextPage =
+    hasName "div"
+    >>> hasAttrValue "class" (== "pagenav-right")
+    >>> getChildren
+    >>> hasName "a"
+    >>> hasAttr "href"
+    >>> getAttrValue "href"
 
--}
+
+-- TODO:
+--  1. Data structure!
+--  2. I think i want to tag the type of page that it is when i send it to the fetcher
+--  3. Fetcher should either dump to disk if its a "file/image" type, otherwise return back the content with the tagged type
+--  4. this means that we will be able to have multiple stage/multiple types of parsers and in theory if the tags are done right
+--  5. they could be done in parallel.
+
+
+indexedParser :: Comic -> TBMChan UL.ByteString -> TBMChan FetchType -> IO Bool
+indexedParser c i o = do
+    r <- atomically $ readTBMChan i
+    case r of
+        Nothing -> return False
+        (Just html) -> do
+            -- HXT
+            let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
+
+            index <- runX $ doc //> indexList
+            chp <- runX $ doc //> chapterList
+            next <- runX $ doc //> indexNextPage
+            -- HXT
+
+            -- Do we have any comic we want to store to disk?
+            putStrLn "Index list:"
+            mapM_ print index
+
+            putStrLn "Chp list:"
+            mapM_ print chp
+
+            putStrLn "Next archive:"
+            mapM_ print next
+
+            -- We do want to keep going cos we just submitted another page to fetch
+            return False
+
 
 
 -- LINEAR comic parser/scanner
@@ -343,6 +311,7 @@ parser :: Comic -> TBMChan UL.ByteString -> TBMChan FetchType -> IO Bool
 parser c i o = do
     r <- atomically $ readTBMChan i
     case r of
+        Nothing -> return False
         (Just html) -> do
             -- HXT
             let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
@@ -374,7 +343,6 @@ parser c i o = do
             -- We do want to keep going cos we just submitted another page to fetch
             return True
 
-        Nothing -> return False
 
 
 
