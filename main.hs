@@ -36,7 +36,7 @@
         a. If cancel/exit, should delete/re-download the corrupt file
 -}
 import Data.Maybe
-import Data.List
+import Data.List as DL
 import Control.Arrow.ArrowTree
 import Text.XML.HXT.Core
 
@@ -203,7 +203,7 @@ main = do
     toReturn <- atomically $ newTBMChan 10
 
     -- Seed with an initial page
-    atomically $ writeTBMChan toFetch $ Webpage (seedPage target)
+    atomically $ writeTBMChan toFetch $ Webpage (seedPage target) Index
 
     -- Start the fetcher
     threadId <- forkIO $ fetch toFetch toReturn
@@ -217,7 +217,7 @@ main = do
 
 
 
---indexList :: (ArrowXml a) => a XmlTree [String]
+indexList :: (ArrowXml a) => a XmlTree (String, (String, String))
 indexList =
     hasName "select"
     >>> hasAttrValue "id" (isInfixOf "cat")
@@ -273,25 +273,71 @@ indexNextPage =
 --  4. this means that we will be able to have multiple stage/multiple types of parsers and in theory if the tags are done right
 --  5. they could be done in parallel.
 
+-- Data type of the url and any additional info needed
+type Url = String
 
-indexedParser :: Comic -> TBMChan UL.ByteString -> TBMChan FetchType -> IO Bool
+data FetchType  = Webpage Url Tag
+                | Image Url FPO.FilePath
+
+data ReplyType  = WebpageReply UL.ByteString Tag
+
+
+-- Additional information tags to tag on a webpage Request
+data Tag = Serial  -- Page by page fetching
+         | Index   -- Index page
+         | Chapter -- Entire chapters page
+
+
+-- TODO:
+--  1. Mangle it to filter out the Commentary track (in an easy/useful way?)
+--  2. Get rid of "Errant Story" part, and lower case/mabye shorten volume to vol-7/chp-2/files
+
+buildUrlAndFilePathMapping :: FPO.FilePath -> [(Url, (String, String))] -> [(Url, FPO.FilePath)]
+buildUrlAndFilePathMapping _ [] = []
+buildUrlAndFilePathMapping root all@((_, (level, name)):xs)
+    | level == "level-3" = map (chapterMapping root) all
+    | otherwise          =
+        let ours = DL.takeWhile (\a -> (fst $ snd a) /= level) xs
+            rest = filter (not . flip elem ours) xs
+        in buildUrlAndFilePathMapping (root FPO.</> (FPO.decodeString name)) ours ++ buildUrlAndFilePathMapping (root) rest
+    where
+        chapterMapping root (url, (_, name)) = (url, root FPO.</> (FPO.decodeString name))
+
+
+indexedParser :: Comic -> TBMChan ReplyType -> TBMChan FetchType -> IO Bool
 indexedParser c i o = do
     r <- atomically $ readTBMChan i
     case r of
         Nothing -> return False
-        (Just html) -> do
+        (Just (WebpageReply html Index)) -> do
             -- HXT
             let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
 
             index <- runX $ doc //> indexList
-            chp <- runX $ doc //> chapterList
-            next <- runX $ doc //> indexNextPage
             -- HXT
+
+--            atomically $ mapM_ (writeTBMChan o) (map (\a -> Webpage a Serial) filteredNext)
 
             -- Do we have any comic we want to store to disk?
             putStrLn "Index list:"
             mapM_ print index
+            putStrLn "processed:"
+            mapM_ print (buildUrlAndFilePathMapping (FP.empty) index)
 
+            -- We do want to keep going cos we just submitted another page to fetch
+            return False
+
+        (Just (WebpageReply html _)) -> do
+            -- HXT
+            let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
+
+            chp <- runX $ doc //> chapterList
+            next <- runX $ doc //> indexNextPage
+            -- HXT
+
+--            atomically $ mapM_ (writeTBMChan o) (map (\a -> Webpage a Serial) filteredNext)
+
+            -- Do we have any comic we want to store to disk?
             putStrLn "Chp list:"
             mapM_ print chp
 
@@ -307,12 +353,12 @@ indexedParser c i o = do
 -- TODO:
 --  * Make this work with indexed comic, if not need a second type
 --  * look into some form of state transformer monad for tracking state between parse run if needed
-parser :: Comic -> TBMChan UL.ByteString -> TBMChan FetchType -> IO Bool
+parser :: Comic -> TBMChan ReplyType -> TBMChan FetchType -> IO Bool
 parser c i o = do
     r <- atomically $ readTBMChan i
     case r of
         Nothing -> return False
-        (Just html) -> do
+        (Just (WebpageReply html _)) -> do
             -- HXT
             let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
             next <- runX $ doc //> (nextPage c)
@@ -325,7 +371,7 @@ parser c i o = do
             -- Errant Story (Bail out when the next webpage matches this)
             let filteredNext = filter (/= "http://www.errantstory.com/2012-03-23/5460") next
 
-            atomically $ mapM_ (writeTBMChan o) (map Webpage filteredNext)
+            atomically $ mapM_ (writeTBMChan o) (map (\a -> Webpage a Serial) filteredNext)
             atomically $ mapM_ (writeTBMChan o) (map (\a -> Image a $ (comicFileName c) (concat vol) a) img)
 
             -- Terminate if we decide there's no more nextPage to fetch
@@ -346,9 +392,7 @@ parser c i o = do
 
 
 
-
-
-fetch :: TBMChan FetchType -> TBMChan UL.ByteString -> IO ()
+fetch :: TBMChan FetchType -> TBMChan ReplyType -> IO ()
 fetch i o = withSocketsDo $ E.bracket
     (H.newManager H.def)
     H.closeManager
@@ -364,7 +408,7 @@ conduitFetcher :: (
     MonadBaseControl IO m,
     MonadResource m,
     Failure H.HttpException m
-    ) => H.Manager -> TBMChan FetchType -> TBMChan UL.ByteString -> m ()
+    ) => H.Manager -> TBMChan FetchType -> TBMChan ReplyType -> m ()
 conduitFetcher m i o = sourceTBMChan i $= CL.mapMaybeM (fetcher m) $$ sinkTBMChan o
 
 
@@ -372,23 +416,18 @@ conduitFetcherList :: (
     MonadBaseControl IO m,
     MonadResource m,
     Failure H.HttpException m
-    ) => H.Manager -> [FetchType] -> m [UL.ByteString]
+    ) => H.Manager -> [FetchType] -> m [ReplyType]
 conduitFetcherList m i = CL.sourceList i $= CL.mapMaybeM (fetcher m) $$ CL.consume
-
-
--- Data type of the url and any additional info needed
-data FetchType  = Webpage String
-                | Image String FPO.FilePath -- Url & Filename
 
 
 fetcher :: (
     MonadBaseControl IO m,
     MonadResource m,
     Failure H.HttpException m
-    ) => H.Manager -> FetchType -> m (Maybe UL.ByteString)
-fetcher m (Webpage u) = do
+    ) => H.Manager -> FetchType -> m (Maybe ReplyType)
+fetcher m (Webpage u t) = do
     reply <- fetchSource m u
-    return $ Just reply
+    return $ Just (WebpageReply reply t)
 fetcher m (Image u f) = do
     -- Stream to disk
     fetchToDisk m u f
