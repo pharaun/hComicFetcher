@@ -83,20 +83,31 @@ import qualified Data.Text as T
 -- Cache hash
 import Crypto.Hash
 
+
 -- Seconds to wait between each request to this site
 fetchWaitTime :: Int
 fetchWaitTime = 1
 
+
 -- Records for all of the site to scrap from
 data Comic = Comic
     { comicName :: String
+
+    -- Seed page/type for kickstarting the parser/fetcher
     , seedPage :: String
+    , seedType :: Tag
+
     , nextPage :: (ArrowXml a) => a XmlTree String
     , comic :: (ArrowXml a) => a XmlTree String
     -- Add support for FPO.FilePath instead of only strings
     , comicFileName :: String -> String -> FPO.FilePath
     -- Identify act (vol 1, 2) via body (class) - single-category-act-four ...
     , whichVolChp :: (ArrowXml a) => a XmlTree String
+
+    -- Indexing parser
+    , indexList :: (ArrowXml a) => a XmlTree (String, (String, String))
+    , chapterList :: (ArrowXml a) => a XmlTree (String, String)
+    , chapterNextPage :: (ArrowXml a) => a XmlTree String
     }
 
 
@@ -108,6 +119,7 @@ data Comic = Comic
 exploitationNow = Comic
     { comicName = "Exploitation Now"
     , seedPage = "http://www.exploitationnow.com/2000-07-07/9"
+    , seedType = Serial
     , nextPage = hasName "a" >>> hasAttrValue "class" (isInfixOf "navi-next") >>> hasAttr "href" >>> getAttrValue "href"
     , comic = hasAttrValue "id" (== "comic") >>> hasName "div" //> hasName "img" >>> hasAttr "src" >>> getAttrValue "src"
     , comicFileName = \vol url ->
@@ -125,16 +137,11 @@ exploitationNow = Comic
         >>> arr (filter (not . isSuffixOf "comics"))
         >>> arr (filter (not . isSuffixOf "uncategorized"))
         >>> arr concat
-    }
 
--- Does Not Play Well With Others
-doesNotPlayWellWithOthers = exploitationNow
-    { comicName = "Does Not Play Well With Others"
-    , seedPage = "http://www.doesnotplaywellwithothers.com/comics/pwc-000f"
-    , comicFileName = \vol url ->
-        let base = FPO.decodeString "./does_not_play_well_with_others"
-            file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
-        in base FPO.</> file
+    -- TODO: NOOP
+    , indexList = undefined
+    , chapterList = undefined
+    , chapterNextPage = undefined
     }
 
 exploitationNowVol :: String -> String
@@ -148,150 +155,89 @@ exploitationNowVol "single-category-act-four"        = "vol-7_act-four"
 exploitationNowVol _ = "Unknown"
 
 
+-- Does Not Play Well With Others
+doesNotPlayWellWithOthers = exploitationNow
+    { comicName = "Does Not Play Well With Others"
+    , seedPage = "http://www.doesnotplaywellwithothers.com/comics/pwc-000f"
+    , seedType = Serial
+    , comicFileName = \_ url ->
+        let base = FPO.decodeString "./does_not_play_well_with_others"
+            file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
+        in base FPO.</> file
+
+    -- TODO: this is a no-op because its not used, need to find a way to make it do nothing
+    --  This can't be undefined because its still invokved
+    , whichVolChp = hasName "body" >>> hasAttr "class" >>> getAttrValue "class"
+    }
+
+
 --
 -- INDEX BASED COMIC
 --
 
-
---    { comicName :: String
---    , seedPage :: String
---    , nextPage :: (ArrowXml a) => a XmlTree String
---    , comic :: (ArrowXml a) => a XmlTree String
---    , comicFileName :: String -> String -> FPO.FilePath
---    -- Identify act (vol 1, 2) via body (class) - single-category-act-four ...
---    , whichVolChp :: (ArrowXml a) => a XmlTree String
---    }
--- TODO:
---  * The page by page works for a raw dump but it does not work for vol/chp/etc
---  * Need to work/create an indexer that will walk the vol/chp tree of the archive
+-- Errant Story
 errantStory = Comic
     { comicName = "Errant Story"
---    , seedPage = "http://www.errantstory.com/2002-11-04/15"
---    , seedPage = "http://www.errantstory.com/category/comics/errant-story/v-01/prologue"
-    , seedPage = "http://www.errantstory.com/category/comics/errant-story/v-01/chapter-04"
-    , nextPage =
-        hasName "h4"
-        >>> hasAttrValue "class" (isInfixOf "nav-next")
-        >>> getChildren
-        >>> hasName "a"
-        >>> hasAttr "href"
-        >>> getAttrValue "href"
+    , seedPage = "http://www.errantstory.com"
+    , seedType = Index
+
+    -- TODO: this is no-op because its a indexed/volume type of comic not sequal
+    , nextPage = undefined
+
     , comic = hasAttrValue "id" (== "comic") >>> hasName "div" //> hasName "img" >>> hasAttr "src" >>> getAttrValue "src"
     , comicFileName = \filepath url ->
         let base = FPO.decodeString "./errant_story"
             fp   = FPO.decodeString filepath
             file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
         in base FPO.</> fp FPO.</> file
-    , whichVolChp =
-        hasName "body"
-        >>> hasAttr "class"
-        >>> getAttrValue "class"
-        >>> arr words
-        >>> arr (filter (isPrefixOf "single-category"))
-        >>> arr (filter (not . isSuffixOf "comic"))
-        >>> arr (filter (not . isSuffixOf "comics"))
-        >>> arr (filter (not . isSuffixOf "uncategorized"))
-        >>> arr concat
-    }
 
+    -- TODO: this is a no-op because its not used, need to find a way to make it do nothing
+    , whichVolChp = undefined
 
--- TODO:
---  - Defined stop point, Errant Story
-main = do
-    let target = errantStory
-
-    -- Queues for processing stuff
-    -- TODO: look into tweaking this and making the indexed parser not deadlock the whole thing... if there's more to add to the queue than can be processed
-    toFetch <- atomically $ newTBMChan 10000
-    toReturn <- atomically $ newTBMChan 10000
-
-    -- Seed with an initial page
-    atomically $ writeTBMChan toFetch $ Webpage (seedPage target) Index -- Exploitation now/others are Serial
-
-    -- Start the fetcher
-    threadId <- forkIO $ fetch toFetch toReturn
-
-    -- Do processing by pulling off each entry off the toReturn and submitting more
---    untilM_ (parser target toReturn toFetch) id
-    untilM_ (indexedParser target toReturn toFetch) id
-
-    -- We're done kill it
-    killThread threadId
-
-
-
-indexList :: (ArrowXml a) => a XmlTree (String, (String, String))
-indexList =
-    hasName "select"
-    >>> hasAttrValue "id" (isInfixOf "cat")
-    >>> getChildren
-    >>> hasName "option"
-    >>> hasAttrValue "class" (/= "level-0") -- Filter first level
-    >>> hasAttrValue "value" (/= "131") -- History
-    >>> hasAttrValue "value" (/= "9") -- Commentary
-    >>> hasAttrValue "value" (/= "137") -- Guest Comics
-    >>> (
-        (getAttrValue "value" >>> arr ("http://www.errantstory.com/?cat=" ++))
-        &&&
-            (
-            getAttrValue "class"
+    , indexList =
+        hasName "select"
+        >>> hasAttrValue "id" (isInfixOf "cat")
+        >>> getChildren
+        >>> hasName "option"
+        >>> hasAttrValue "class" (/= "level-0") -- Filter first level
+        >>> hasAttrValue "value" (/= "131") -- History
+        >>> hasAttrValue "value" (/= "9") -- Commentary
+        >>> hasAttrValue "value" (/= "137") -- Guest Comics
+        >>> (
+            (getAttrValue "value" >>> arr ("http://www.errantstory.com/?cat=" ++))
             &&&
-            (getChildren >>> getText >>> arr (filter (/= '\160')))
+                (
+                getAttrValue "class"
+                &&&
+                (getChildren >>> getText >>> arr (filter (/= '\160')))
+                )
             )
-        )
 
-
---chapterList :: (ArrowXml a) => a XmlTree String
-chapterList =
-    hasName "div"
-    >>> hasAttrValue "class" (isInfixOf "comicarchiveframe")
-    >>> getChildren
-    >>> hasName "a"
-    >>> hasAttr "href"
-    >>> (
-        getAttrValue "href"
-        &&&
-            (
-            getChildren
-            >>> hasName "img"
-            >>> hasAttr "alt"
-            >>> getAttrValue "alt"
+    , chapterList =
+        hasName "div"
+        >>> hasAttrValue "class" (isInfixOf "comicarchiveframe")
+        >>> getChildren
+        >>> hasName "a"
+        >>> hasAttr "href"
+        >>> (
+            getAttrValue "href"
+            &&&
+                (
+                getChildren
+                >>> hasName "img"
+                >>> hasAttr "alt"
+                >>> getAttrValue "alt"
+                )
             )
-        )
 
-
-indexNextPage =
-    hasName "div"
-    >>> hasAttrValue "class" (== "pagenav-right")
-    >>> getChildren
-    >>> hasName "a"
-    >>> hasAttr "href"
-    >>> getAttrValue "href"
-
-
--- TODO:
---  1. Data structure!
---  2. I think i want to tag the type of page that it is when i send it to the fetcher
---  3. Fetcher should either dump to disk if its a "file/image" type, otherwise return back the content with the tagged type
---  4. this means that we will be able to have multiple stage/multiple types of parsers and in theory if the tags are done right
---  5. they could be done in parallel.
-
--- Data type of the url and any additional info needed
-type Url = String
-
-data FetchType  = Webpage Url Tag
-                | Image Url FPO.FilePath
-
-data ReplyType  = WebpageReply UL.ByteString Tag
-
-
--- Additional information tags to tag on a webpage Request
-data Tag = Serial  -- Page by page fetching
-         | Index   -- Index page
-         | Volume  -- Entire volume page
-         | Page FPO.FilePath   -- single comic page
-         | Chapter FPO.FilePath -- Entire chapters page
-
+    , chapterNextPage =
+        hasName "div"
+        >>> hasAttrValue "class" (== "pagenav-right")
+        >>> getChildren
+        >>> hasName "a"
+        >>> hasAttr "href"
+        >>> getAttrValue "href"
+    }
 
 -- TODO:
 --  1. Mangle it to filter out the Commentary track (in an easy/useful way?)
@@ -308,6 +254,55 @@ buildUrlAndFilePathMapping root all@((_, (level, name)):xs)
         chapterMapping root (url, (_, name)) = (url, root FPO.</> (FPO.decodeString name))
 
 
+
+
+-- TODO:
+--  - Defined stop point, Errant Story
+--  - Some command line arg for picking which comic to run
+main = do
+    let target = errantStory
+--    let target = doesNotPlayWellWithOthers
+--    let target = exploitationNow
+
+    -- Queues for processing stuff
+    -- TODO: look into tweaking this and making the indexed parser not deadlock the whole thing... if there's more to add to the queue than can be processed
+    toFetch <- atomically $ newTBMChan 10000
+    toReturn <- atomically $ newTBMChan 10000
+
+    -- Seed with an initial page
+    atomically $ writeTBMChan toFetch $ Webpage (seedPage target) (seedType target)
+
+    -- Start the fetcher
+    threadId <- forkIO $ fetch toFetch toReturn
+
+    -- Do processing by pulling off each entry off the toReturn and submitting more
+    untilM_ (indexedParser target toReturn toFetch) id
+
+    -- We're done kill it
+    killThread threadId
+
+
+
+-- Data type of the url and any additional info needed
+type Url = String
+
+data FetchType  = Webpage Url Tag
+                | Image Url FPO.FilePath
+
+data ReplyType  = WebpageReply UL.ByteString Tag
+
+-- Additional information tags to tag on a webpage Request
+data Tag = Serial  -- Page by page fetching
+         | Index   -- Index page
+         | Chapter FPO.FilePath -- Entire chapters page
+         | Page FPO.FilePath   -- single comic page
+
+
+-- Indexer parser,
+-- The mother of all parser, it parses various Tagged pages and then go from there
+-- TODO:
+--  * look into some form of state transformer monad for tracking state between parse run if needed
+--  * This ^ is probably the Tag, which let us tag specific page with additional information if its needed
 indexedParser :: Comic -> TBMChan ReplyType -> TBMChan FetchType -> IO Bool
 indexedParser c i o = do
     r <- atomically $ readTBMChan i
@@ -317,9 +312,10 @@ indexedParser c i o = do
             -- HXT
             let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
 
-            index <- runX $ doc //> indexList
+            index <- runX $ doc //> (indexList c)
             -- HXT
 
+            -- TODO: have a pre-process step for processing the parsing results into a useful list for dumping into TBMChans
             let list = buildUrlAndFilePathMapping (FP.empty) index
 
             -- Dump list of Comic page fetched
@@ -337,8 +333,8 @@ indexedParser c i o = do
             -- HXT
             let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
 
-            chp <- runX $ doc //> chapterList
-            next <- runX $ doc //> indexNextPage
+            chp <- runX $ doc //> (chapterList c)
+            next <- runX $ doc //> (chapterNextPage c)
             -- HXT
 
             -- Dump the next pages into the queue
@@ -368,6 +364,8 @@ indexedParser c i o = do
 
             atomically $ mapM_ (writeTBMChan o) (map (\a -> Image a $ (comicFileName c) (FPO.encodeString fp) a) img)
 
+            -- TODO: probably want to have a way to identify when all of the fetching is done and parsing is done and die
+            --  1. But it needs to allow for *long* parsing pauses and long fetching pauses in case of network issues or slow parser step
             -- Terminate if we decide there's no more nextPage to fetch
             -- This does not work if there's multiple parser/worker going but it'll be ok for this poc
 --            Control.Monad.when (null filteredNext) $ atomically $ closeTBMChan o
@@ -379,23 +377,7 @@ indexedParser c i o = do
             -- We do want to keep going cos we just submitted another page to fetch
             return True
 
-
-        (Just (WebpageReply html _)) -> do
-            -- We do want to keep going cos we just submitted another page to fetch
-            return False
-
-
-
--- LINEAR comic parser/scanner
--- TODO:
---  * Make this work with indexed comic, if not need a second type
---  * look into some form of state transformer monad for tracking state between parse run if needed
-parser :: Comic -> TBMChan ReplyType -> TBMChan FetchType -> IO Bool
-parser c i o = do
-    r <- atomically $ readTBMChan i
-    case r of
-        Nothing -> return False
-        (Just (WebpageReply html _)) -> do
+        (Just (WebpageReply html Serial)) -> do
             -- HXT
             let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
             next <- runX $ doc //> (nextPage c)
@@ -405,26 +387,29 @@ parser c i o = do
             vol <- runX $ doc //> (whichVolChp c)
             -- HXT
 
-            -- Errant Story (Bail out when the next webpage matches this)
-            let filteredNext = filter (/= "http://www.errantstory.com/2012-03-23/5460") next
-
-            atomically $ mapM_ (writeTBMChan o) (map (\a -> Webpage a Serial) filteredNext)
+            atomically $ mapM_ (writeTBMChan o) (map (\a -> Webpage a Serial) next)
             atomically $ mapM_ (writeTBMChan o) (map (\a -> Image a $ (comicFileName c) (concat vol) a) img)
 
             -- Terminate if we decide there's no more nextPage to fetch
             -- This does not work if there's multiple parser/worker going but it'll be ok for this poc
-            Control.Monad.when (null filteredNext) $ atomically $ closeTBMChan o
+            Control.Monad.when (null next) $ atomically $ closeTBMChan o
 
             -- Do we have any comic we want to store to disk?
             putStrLn "Fetched Urls:"
             mapM_ putStrLn img
-            mapM_ putStrLn filteredNext
+            mapM_ putStrLn next
 
             putStrLn "vol:"
             mapM_ putStrLn vol
 
             -- We do want to keep going cos we just submitted another page to fetch
             return True
+
+
+
+
+
+
 
 
 
@@ -539,7 +524,6 @@ cacheSink url = do
     liftIO $ createTree $ FP.directory fp
 
     sinkFile fp
-
 
 cacheFile :: String -> FPO.FilePath
 cacheFile url = FPO.decodeString "./cache" FPO.</> (FPO.decode $ digestToHexByteString $ (hash $ US.fromString url :: Digest SHA512))
