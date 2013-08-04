@@ -93,6 +93,7 @@ data Comic = Comic
     , seedPage :: String
     , nextPage :: (ArrowXml a) => a XmlTree String
     , comic :: (ArrowXml a) => a XmlTree String
+    -- Add support for FPO.FilePath instead of only strings
     , comicFileName :: String -> String -> FPO.FilePath
     -- Identify act (vol 1, 2) via body (class) - single-category-act-four ...
     , whichVolChp :: (ArrowXml a) => a XmlTree String
@@ -176,10 +177,11 @@ errantStory = Comic
         >>> hasAttr "href"
         >>> getAttrValue "href"
     , comic = hasAttrValue "id" (== "comic") >>> hasName "div" //> hasName "img" >>> hasAttr "src" >>> getAttrValue "src"
-    , comicFileName = \vol url ->
+    , comicFileName = \filepath url ->
         let base = FPO.decodeString "./errant_story"
+            fp   = FPO.decodeString filepath
             file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
-        in base FPO.</> file
+        in base FPO.</> fp FPO.</> file
     , whichVolChp =
         hasName "body"
         >>> hasAttr "class"
@@ -199,11 +201,12 @@ main = do
     let target = errantStory
 
     -- Queues for processing stuff
-    toFetch <- atomically $ newTBMChan 10
-    toReturn <- atomically $ newTBMChan 10
+    -- TODO: look into tweaking this and making the indexed parser not deadlock the whole thing... if there's more to add to the queue than can be processed
+    toFetch <- atomically $ newTBMChan 10000
+    toReturn <- atomically $ newTBMChan 10000
 
     -- Seed with an initial page
-    atomically $ writeTBMChan toFetch $ Webpage (seedPage target) Index
+    atomically $ writeTBMChan toFetch $ Webpage (seedPage target) Index -- Exploitation now/others are Serial
 
     -- Start the fetcher
     threadId <- forkIO $ fetch toFetch toReturn
@@ -285,13 +288,14 @@ data ReplyType  = WebpageReply UL.ByteString Tag
 -- Additional information tags to tag on a webpage Request
 data Tag = Serial  -- Page by page fetching
          | Index   -- Index page
-         | Chapter -- Entire chapters page
+         | Volume  -- Entire volume page
+         | Page FPO.FilePath   -- single comic page
+         | Chapter FPO.FilePath -- Entire chapters page
 
 
 -- TODO:
 --  1. Mangle it to filter out the Commentary track (in an easy/useful way?)
 --  2. Get rid of "Errant Story" part, and lower case/mabye shorten volume to vol-7/chp-2/files
-
 buildUrlAndFilePathMapping :: FPO.FilePath -> [(Url, (String, String))] -> [(Url, FPO.FilePath)]
 buildUrlAndFilePathMapping _ [] = []
 buildUrlAndFilePathMapping root all@((_, (level, name)):xs)
@@ -316,18 +320,20 @@ indexedParser c i o = do
             index <- runX $ doc //> indexList
             -- HXT
 
---            atomically $ mapM_ (writeTBMChan o) (map (\a -> Webpage a Serial) filteredNext)
+            let list = buildUrlAndFilePathMapping (FP.empty) index
 
-            -- Do we have any comic we want to store to disk?
-            putStrLn "Index list:"
-            mapM_ print index
-            putStrLn "processed:"
-            mapM_ print (buildUrlAndFilePathMapping (FP.empty) index)
+            -- Dump list of Comic page fetched
+            putStrLn "Chp list:"
+            mapM_ print list
+
+            -- TODO: this step isn't working correctly. validate what its doing.
+            --  1. Probably being limited by the queue length and blocking here, tho fetcher should work?
+            atomically $ mapM_ (writeTBMChan o) (map (\(u, p) -> Webpage u (Chapter p)) list)
 
             -- We do want to keep going cos we just submitted another page to fetch
-            return False
+            return True
 
-        (Just (WebpageReply html _)) -> do
+        (Just (WebpageReply html (Chapter fp))) -> do
             -- HXT
             let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
 
@@ -335,7 +341,13 @@ indexedParser c i o = do
             next <- runX $ doc //> indexNextPage
             -- HXT
 
---            atomically $ mapM_ (writeTBMChan o) (map (\a -> Webpage a Serial) filteredNext)
+            -- Dump the next pages into the queue
+            atomically $ mapM_ (writeTBMChan o) (map (\a -> Webpage a (Chapter fp)) next)
+
+            -- Dump the single page into the queue
+            -- TODO:
+            --  1. Do something with the name of the page (Chapter 42: foobar) (not on all pages unfortunately)
+            atomically $ mapM_ (writeTBMChan o) (map (\a -> Webpage (fst a) (Page fp)) chp)
 
             -- Do we have any comic we want to store to disk?
             putStrLn "Chp list:"
@@ -344,6 +356,31 @@ indexedParser c i o = do
             putStrLn "Next archive:"
             mapM_ print next
 
+            -- We do want to keep going cos we just submitted another page to fetch
+            return True
+
+        (Just (WebpageReply html (Page fp))) -> do
+            -- HXT
+            let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
+
+            img <- runX $ doc //> (comic c)
+            -- HXT
+
+            atomically $ mapM_ (writeTBMChan o) (map (\a -> Image a $ (comicFileName c) (FPO.encodeString fp) a) img)
+
+            -- Terminate if we decide there's no more nextPage to fetch
+            -- This does not work if there's multiple parser/worker going but it'll be ok for this poc
+--            Control.Monad.when (null filteredNext) $ atomically $ closeTBMChan o
+
+            -- Do we have any comic we want to store to disk?
+            putStrLn "Fetched Urls:"
+            mapM_ putStrLn img
+
+            -- We do want to keep going cos we just submitted another page to fetch
+            return True
+
+
+        (Just (WebpageReply html _)) -> do
             -- We do want to keep going cos we just submitted another page to fetch
             return False
 
