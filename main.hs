@@ -171,6 +171,40 @@ doesNotPlayWellWithOthers = exploitationNow
     }
 
 
+-- Girl Genius
+girlGenius = Comic
+    { comicName = "Girl Genius"
+    , seedPage = "http://www.girlgeniusonline.com/comic.php?date=20021104"
+    , seedType = Serial
+
+    , nextPage = hasName "td" >>> hasAttrValue "valign" (== "top") //> (hasName "a" </ (hasName "img" >>> hasAttrValue "alt" (== "The Next Comic"))) >>> getAttrValue "href"
+
+    , comic = hasName "td" >>> hasAttrValue "valign" (== "middle") //> hasName "img" >>> hasAttr "src" >>> getAttrValue "src"
+
+    , comicFileName = \vol url ->
+        let base = FPO.decodeString "./girl_genius"
+            file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
+            dirs = FPO.fromText $ T.pack $ exploitationNowVol vol
+        in base FPO.</> dirs FPO.</> file
+
+    , whichVolChp =
+        hasName "body"
+        >>> hasAttr "class"
+        >>> getAttrValue "class"
+        >>> arr words
+        >>> arr (filter (isPrefixOf "single-category"))
+        >>> arr (filter (not . isSuffixOf "comic"))
+        >>> arr (filter (not . isSuffixOf "comics"))
+        >>> arr (filter (not . isSuffixOf "uncategorized"))
+        >>> arr concat
+
+    -- TODO: NOOP
+    , indexList = undefined
+    , chapterList = undefined
+    , chapterNextPage = undefined
+    }
+
+
 --
 -- INDEX BASED COMIC
 --
@@ -260,9 +294,10 @@ buildUrlAndFilePathMapping root all@((_, (level, name)):xs)
 --  - Defined stop point, Errant Story
 --  - Some command line arg for picking which comic to run
 main = do
-    let target = errantStory
+--    let target = errantStory
 --    let target = doesNotPlayWellWithOthers
 --    let target = exploitationNow
+    let target = girlGenius
 
     -- Queues for processing stuff
     -- TODO: look into tweaking this and making the indexed parser not deadlock the whole thing... if there's more to add to the queue than can be processed
@@ -381,18 +416,28 @@ indexedParser c i o = do
             -- HXT
             let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
             next <- runX $ doc //> (nextPage c)
-
             img <- runX $ doc //> (comic c)
+            vol <- runX $ doc //>
+                hasName "form"
+                >>> hasAttrValue "name" (== "storyline")
+                //> (hasName "option" `notContaining` (getChildren >>> hasText (== "---\"ADVANCED CLASS\" BEGINS---")))
+                >>> (
+                        (withDefault (getAttrValue0 "selected") "no" >>> arr (/= "no"))
+                        &&&
+                        (getChildren >>> getText)
+                    )
+                >>. filter (\(a, b) -> a || ("VOLUME" `isInfixOf` b))
 
-            vol <- runX $ doc //> (whichVolChp c)
+--(whichVolChp c)
             -- HXT
 
-            atomically $ mapM_ (writeTBMChan o) (map (\a -> Webpage a Serial) next)
-            atomically $ mapM_ (writeTBMChan o) (map (\a -> Image a $ (comicFileName c) (concat vol) a) img)
+--            atomically $ mapM_ (writeTBMChan o) (map (\a -> Webpage a Serial) next)
+--            atomically $ mapM_ (writeTBMChan o) (map (\a -> Image a $ (comicFileName c) (concat vol) a) img)
 
             -- Terminate if we decide there's no more nextPage to fetch
             -- This does not work if there's multiple parser/worker going but it'll be ok for this poc
-            Control.Monad.when (null next) $ atomically $ closeTBMChan o
+--            Control.Monad.when (null next) $ atomically $ closeTBMChan o
+            Control.Monad.when (null []) $ atomically $ closeTBMChan o
 
             -- Do we have any comic we want to store to disk?
             putStrLn "Fetched Urls:"
@@ -400,7 +445,8 @@ indexedParser c i o = do
             mapM_ putStrLn next
 
             putStrLn "vol:"
-            mapM_ putStrLn vol
+            mapM_ print vol
+
 
             -- We do want to keep going cos we just submitted another page to fetch
             return True
