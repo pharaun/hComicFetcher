@@ -207,7 +207,7 @@ girlGenius = Comic
                 &&&
                 (getChildren >>> getText)
             )
-        >>. filter (\(a, b) -> a || ("VOLUME" `isInfixOf` b))
+        >>. filter (\(a, b) -> a || ("VOLUME" `isInfixOf` b) || ("Volume" `isInfixOf` b))
         ) >. (fst . DL.break fst)
         >>> unlistA
         >>> arr snd
