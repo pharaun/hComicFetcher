@@ -102,7 +102,8 @@ data Comic = Comic
     -- Add support for FPO.FilePath instead of only strings
     , comicFileName :: String -> String -> FPO.FilePath
     -- Identify act (vol 1, 2) via body (class) - single-category-act-four ...
-    , whichVolChp :: (ArrowXml a) => a XmlTree String
+    , whichVolChp :: (ArrowXml a) => a b XmlTree -> a b String
+--    , whichVolChp :: (ArrowXml a) => a XmlTree String
 
     -- Indexing parser
     , indexList :: (ArrowXml a) => a XmlTree (String, (String, String))
@@ -127,8 +128,8 @@ exploitationNow = Comic
             file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
             dirs = FPO.fromText $ T.pack $ exploitationNowVol vol
         in base FPO.</> dirs FPO.</> file
-    , whichVolChp =
-        hasName "body"
+    , whichVolChp = \doc -> doc
+        //> hasName "body"
         >>> hasAttr "class"
         >>> getAttrValue "class"
         >>> arr words
@@ -167,7 +168,7 @@ doesNotPlayWellWithOthers = exploitationNow
 
     -- TODO: this is a no-op because its not used, need to find a way to make it do nothing
     --  This can't be undefined because its still invokved
-    , whichVolChp = hasName "body" >>> hasAttr "class" >>> getAttrValue "class"
+    , whichVolChp = \doc -> doc //> hasName "body" >>> hasAttr "class" >>> getAttrValue "class"
     }
 
 
@@ -179,7 +180,14 @@ girlGenius = Comic
 
     , nextPage = hasName "td" >>> hasAttrValue "valign" (== "top") //> (hasName "a" </ (hasName "img" >>> hasAttrValue "alt" (== "The Next Comic"))) >>> getAttrValue "href"
 
-    , comic = hasName "td" >>> hasAttrValue "valign" (== "middle") //> hasName "img" >>> hasAttr "src" >>> getAttrValue "src"
+    , comic =
+        hasName "td"
+        >>> hasAttrValue "valign" (== "middle")
+        //> hasName "img"
+        >>> hasAttr "src"
+        >>> getAttrValue "src"
+        >>. arr (filter (isPrefixOf "http"))
+
 
     , comicFileName = \vol url ->
         let base = FPO.decodeString "./girl_genius"
@@ -187,16 +195,23 @@ girlGenius = Comic
             dirs = FPO.fromText $ T.pack $ exploitationNowVol vol
         in base FPO.</> dirs FPO.</> file
 
-    , whichVolChp =
-        hasName "body"
-        >>> hasAttr "class"
-        >>> getAttrValue "class"
-        >>> arr words
-        >>> arr (filter (isPrefixOf "single-category"))
-        >>> arr (filter (not . isSuffixOf "comic"))
-        >>> arr (filter (not . isSuffixOf "comics"))
-        >>> arr (filter (not . isSuffixOf "uncategorized"))
-        >>> arr concat
+
+    -- TODO: stops at volume four, need to figure out why
+    , whichVolChp = \doc ->
+        (doc //>
+        hasName "form"
+        >>> hasAttrValue "name" (== "storyline")
+        //> (hasName "option" `notContaining` (getChildren >>> hasText (== "---\"ADVANCED CLASS\" BEGINS---")))
+        >>> (
+                (withDefault (getAttrValue0 "selected") "no" >>> arr (/= "no"))
+                &&&
+                (getChildren >>> getText)
+            )
+        >>. filter (\(a, b) -> a || ("VOLUME" `isInfixOf` b))
+        ) >. (fst . DL.break fst)
+        >>> unlistA
+        >>> arr snd
+
 
     -- TODO: NOOP
     , indexList = undefined
@@ -417,27 +432,16 @@ indexedParser c i o = do
             let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
             next <- runX $ doc //> (nextPage c)
             img <- runX $ doc //> (comic c)
-            vol <- runX $ doc //>
-                hasName "form"
-                >>> hasAttrValue "name" (== "storyline")
-                //> (hasName "option" `notContaining` (getChildren >>> hasText (== "---\"ADVANCED CLASS\" BEGINS---")))
-                >>> (
-                        (withDefault (getAttrValue0 "selected") "no" >>> arr (/= "no"))
-                        &&&
-                        (getChildren >>> getText)
-                    )
-                >>. filter (\(a, b) -> a || ("VOLUME" `isInfixOf` b))
-
---(whichVolChp c)
+            vol <- runX $ (whichVolChp c) doc
             -- HXT
 
---            atomically $ mapM_ (writeTBMChan o) (map (\a -> Webpage a Serial) next)
---            atomically $ mapM_ (writeTBMChan o) (map (\a -> Image a $ (comicFileName c) (concat vol) a) img)
+            atomically $ mapM_ (writeTBMChan o) (map (\a -> Webpage a Serial) next)
+            atomically $ mapM_ (writeTBMChan o) (map (\a -> Image a $ (comicFileName c) (concat vol) a) img)
 
             -- Terminate if we decide there's no more nextPage to fetch
             -- This does not work if there's multiple parser/worker going but it'll be ok for this poc
---            Control.Monad.when (null next) $ atomically $ closeTBMChan o
-            Control.Monad.when (null []) $ atomically $ closeTBMChan o
+            Control.Monad.when (null next) $ atomically $ closeTBMChan o
+--            Control.Monad.when (null []) $ atomically $ closeTBMChan o
 
             -- Do we have any comic we want to store to disk?
             putStrLn "Fetched Urls:"
@@ -445,7 +449,7 @@ indexedParser c i o = do
             mapM_ putStrLn next
 
             putStrLn "vol:"
-            mapM_ print vol
+            mapM_ putStrLn vol
 
 
             -- We do want to keep going cos we just submitted another page to fetch
@@ -455,11 +459,7 @@ indexedParser c i o = do
 
 
 
-
-
-
-
-
+-- TODO: restart if the exception kills -- main.hs: InvalidUrlException "/ggmain/doublespreads/extrabits/Gil.jpg" "Invalid URL"
 fetch :: TBMChan FetchType -> TBMChan ReplyType -> IO ()
 fetch i o = withSocketsDo $ E.bracket
     (H.newManager H.def)
