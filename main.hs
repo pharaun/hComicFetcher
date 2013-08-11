@@ -4,7 +4,7 @@
         a. Fetch a comic page
         b. Store it on disk in sequence order
 
-        c. Close each volume/chapter such as -- TODO
+        c. Close each volume/chapter such as
             Errant Story
                 Vol 1
                     Chp 1
@@ -21,69 +21,62 @@
         c. Storing them into cbz latter on or extracting to that
         d. Ability to restart/queue from any point in the download process
         e. Store any additional metadata (alt text, notes, etc)
+        f. Ability to choice at runtime which comic to download and check for updates, etc
+        g. Expire the cache or check that there's no updates
 
     3. Requirements?
         a. Identify what qualifies as a Volume, Chapter, Page
         b. Identify how to process/fetch "next" page, chapter, volume
         c. Identify how to download and store each to disk in a scheme that makes sense
         d. How to specifiy what to be fetched (Url of the said series?) (Site?)
-            a. Typeclass
-                - nextPage
-                - comic
-                - volume, chapter
 
     4. TODO:
         a. If cancel/exit, should delete/re-download the corrupt file
 -}
-import Data.Maybe
+
+import Data.Conduit (($=), ($$), ($$+), ($$+-), MonadBaseControl, MonadResource)
+
+import qualified Data.Conduit as C
+import qualified Data.Conduit.Filesystem as CF
+import qualified Data.Conduit.List as CL
+import qualified Data.Conduit.TMChan as CT
+
+import Network (withSocketsDo)
+import Network.HTTP.Types.URI (decodePathSegments)
+import Network.HTTP.Conduit (HttpException, Manager)
+
+import qualified Network.HTTP.Conduit as CH
+
+import Data.Maybe (catMaybes)
+
 import Data.List (isInfixOf, isPrefixOf, isSuffixOf)
+
 import qualified Data.List as DL
 import qualified Data.List.Split as SL
-import Control.Arrow.ArrowTree
+
 import Text.XML.HXT.Core
 
-import Network
-
-import Control.Monad
-import Control.Monad.IO.Class
-import Control.Monad.STM
+import Control.Concurrent (forkIO, killThread, threadDelay)
 import Control.Concurrent.STM.TBMChan
-import Control.Concurrent
+import Control.Failure (Failure)
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.STM (atomically)
+import qualified Control.Exception as E
+import qualified Control.Monad as CM
 
-import Data.Conduit.TMChan
-
-import Data.Conduit
-import qualified Network.HTTP.Conduit as H
-import qualified Data.Conduit as C
-import Data.Conduit.Binary hiding (sourceFile, sinkFile)
-import Data.Conduit.Filesystem
-
-import qualified Data.Conduit.List as CL
-
+import qualified Data.Text as T
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Lazy as L
 import qualified Data.ByteString.Lazy.UTF8 as UL
 import qualified Data.ByteString.UTF8 as US
 
-import Data.Maybe
+import Filesystem (createTree, isFile)
+import Filesystem.Path.CurrentOS ((</>))
 
-import qualified Control.Exception as E
-
-import Control.Failure
-
-import Prelude hiding (FilePath)
 import qualified Filesystem.Path as FP
 import qualified Filesystem.Path.CurrentOS as FPO
-import qualified Data.Conduit.Internal as IC
 
-import Filesystem
-
-import Network.HTTP.Types.URI
-
-import qualified Data.Text as T
-
--- Cache hash
-import Crypto.Hash
+import Crypto.Hash (digestToHexByteString, hash, Digest, SHA512)
 
 
 -- Seconds to wait between each request to this site
@@ -105,7 +98,6 @@ data Comic = Comic
     , comicFileName :: String -> String -> FPO.FilePath
     -- Identify act (vol 1, 2) via body (class) - single-category-act-four ...
     , whichVolChp :: (ArrowXml a) => a b XmlTree -> a b String
---    , whichVolChp :: (ArrowXml a) => a XmlTree String
 
     -- Indexing parser
     , indexList :: (ArrowXml a) => a XmlTree (String, (String, String))
@@ -131,7 +123,7 @@ exploitationNow = Comic
         let base = FPO.decodeString "./exploitation_now"
             file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
             dirs = FPO.fromText $ T.pack $ exploitationNowVol vol
-        in base FPO.</> dirs FPO.</> file
+        in base </> dirs </> file
     , whichVolChp = \doc -> doc
         //> hasName "body"
         >>> hasAttr "class"
@@ -168,7 +160,7 @@ doesNotPlayWellWithOthers = exploitationNow
     , comicFileName = \_ url ->
         let base = FPO.decodeString "./does_not_play_well_with_others"
             file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
-        in base FPO.</> file
+        in base </> file
 
     -- TODO: this is a no-op because its not used, need to find a way to make it do nothing
     --  This can't be undefined because its still invokved
@@ -197,7 +189,7 @@ girlGenius = Comic
         let base = FPO.decodeString "./girl_genius"
             file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
             dirs = FPO.fromText $ T.pack $ girlGeniusVol vol
-        in base FPO.</> dirs FPO.</> file
+        in base </> dirs </> file
 
     -- TODO: this returns a single string (cuz its concating all of this), we worked around this but this is very much non-ideal
     --  For workaround see girlGeniusVol
@@ -247,7 +239,7 @@ errantStory = Comic
         let base = FPO.decodeString "./errant_story"
             fp   = FPO.decodeString filepath
             file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
-        in base FPO.</> fp FPO.</> file
+        in base </> fp </> file
 
     -- TODO: this is a no-op because its not used, need to find a way to make it do nothing
     , whichVolChp = undefined
@@ -309,9 +301,9 @@ buildUrlAndFilePathMapping root all@((_, (level, name)):xs)
     | otherwise          =
         let ours = DL.takeWhile (\a -> (fst $ snd a) /= level) xs
             rest = filter (not . flip elem ours) xs
-        in buildUrlAndFilePathMapping (root FPO.</> (FPO.decodeString name)) ours ++ buildUrlAndFilePathMapping (root) rest
+        in buildUrlAndFilePathMapping (root </> (FPO.decodeString name)) ours ++ buildUrlAndFilePathMapping (root) rest
     where
-        chapterMapping root (url, (_, name)) = (url, root FPO.</> (FPO.decodeString name))
+        chapterMapping root (url, (_, name)) = (url, root </> (FPO.decodeString name))
 
 
 -- Gunnerkrigg Court
@@ -329,7 +321,7 @@ gunnerkrigCourt = Comic
         let base = FPO.decodeString "./gunnerkrigg_court"
             fp   = FPO.decodeString $ fixVolChp filepath
             file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
-        in base FPO.</> fp FPO.</> file
+        in base </> fp </> file
 
     -- TODO: this is a no-op because its not used, need to find a way to make it do nothing
     , whichVolChp = undefined
@@ -395,11 +387,11 @@ fixVolChp xs = xs
 --  - Defined stop point, Errant Story
 --  - Some command line arg for picking which comic to run
 main = do
-    let target = exploitationNow
+--    let target = exploitationNow
 --    let target = doesNotPlayWellWithOthers
 --    let target = errantStory
 --    let target = girlGenius
---    let target = gunnerkrigCourt
+    let target = gunnerkrigCourt
 
     -- Queues for processing stuff
     -- TODO: look into tweaking this and making the indexed parser not deadlock the whole thing... if there's more to add to the queue than can be processed
@@ -536,7 +528,7 @@ indexedParser c i o = do
             --  1. But it needs to allow for *long* parsing pauses and long fetching pauses in case of network issues or slow parser step
             -- Terminate if we decide there's no more nextPage to fetch
             -- This does not work if there's multiple parser/worker going but it'll be ok for this poc
---            Control.Monad.when (null filteredNext) $ atomically $ closeTBMChan o
+--            CM.when (null filteredNext) $ atomically $ closeTBMChan o
 
             -- Do we have any comic we want to store to disk?
             putStrLn "Fetched Urls:"
@@ -558,8 +550,8 @@ indexedParser c i o = do
 
             -- Terminate if we decide there's no more nextPage to fetch
             -- This does not work if there's multiple parser/worker going but it'll be ok for this poc
-            Control.Monad.when (null next) $ atomically $ closeTBMChan o
---            Control.Monad.when (null []) $ atomically $ closeTBMChan o
+            CM.when (null next) $ atomically $ closeTBMChan o
+--            CM.when (null []) $ atomically $ closeTBMChan o
 
             -- Do we have any comic we want to store to disk?
             putStrLn "Fetched Urls:"
@@ -580,11 +572,11 @@ indexedParser c i o = do
 -- TODO: restart if the exception kills -- main.hs: InvalidUrlException "/ggmain/doublespreads/extrabits/Gil.jpg" "Invalid URL"
 fetch :: TBMChan FetchType -> TBMChan ReplyType -> IO ()
 fetch i o = withSocketsDo $ E.bracket
-    (H.newManager H.def)
-    H.closeManager
+    (CH.newManager CH.def)
+    CH.closeManager
     (\manager ->
         -- Forever loop (probably don't need the forever at all)
-        forever $ runResourceT $ conduitFetcher manager i o
+        CM.forever $ C.runResourceT $ conduitFetcher manager i o
     )
 
 
@@ -593,24 +585,24 @@ fetch i o = withSocketsDo $ E.bracket
 conduitFetcher :: (
     MonadBaseControl IO m,
     MonadResource m,
-    Failure H.HttpException m
-    ) => H.Manager -> TBMChan FetchType -> TBMChan ReplyType -> m ()
-conduitFetcher m i o = sourceTBMChan i $= CL.mapMaybeM (fetcher m) $$ sinkTBMChan o
+    Failure HttpException m
+    ) => Manager -> TBMChan FetchType -> TBMChan ReplyType -> m ()
+conduitFetcher m i o = CT.sourceTBMChan i $= CL.mapMaybeM (fetcher m) $$ CT.sinkTBMChan o
 
 
 conduitFetcherList :: (
     MonadBaseControl IO m,
     MonadResource m,
-    Failure H.HttpException m
-    ) => H.Manager -> [FetchType] -> m [ReplyType]
+    Failure HttpException m
+    ) => Manager -> [FetchType] -> m [ReplyType]
 conduitFetcherList m i = CL.sourceList i $= CL.mapMaybeM (fetcher m) $$ CL.consume
 
 
 fetcher :: (
     MonadBaseControl IO m,
     MonadResource m,
-    Failure H.HttpException m
-    ) => H.Manager -> FetchType -> m (Maybe ReplyType)
+    Failure HttpException m
+    ) => Manager -> FetchType -> m (Maybe ReplyType)
 fetcher m (Webpage u t) = do
     reply <- fetchSource m u
     return $ Just (WebpageReply reply t)
@@ -624,19 +616,19 @@ fetcher m (Image u f) = do
 fetchSource :: (
     MonadBaseControl IO m,
     MonadResource m,
-    Failure H.HttpException m
-    ) => H.Manager -> String -> m UL.ByteString
+    Failure HttpException m
+    ) => Manager -> String -> m UL.ByteString
 fetchSource m url = do
     response <- fetchStream m url
-    chunk <- response C.$$+- CL.consume
+    chunk <- response $$+- CL.consume
     return $ L.fromChunks chunk
 
 
 fetchToDisk :: (
     MonadBaseControl IO m,
     MonadResource m,
-    Failure H.HttpException m
-    ) => H.Manager -> String -> FPO.FilePath -> m ()
+    Failure HttpException m
+    ) => Manager -> String -> FPO.FilePath -> m ()
 fetchToDisk m url file = do
     -- TODO: Replace this with Network.HTTP.Conduit.Downloader probably for streaming file to disk
     response <- fetchStream m url
@@ -644,17 +636,17 @@ fetchToDisk m url file = do
     -- Let's create the directory tree if it does not exist first
     liftIO $ createTree $ FP.directory file
 
-    response C.$$+- sinkFile file
+    response $$+- CF.sinkFile file
 
 
 fetchStream :: (
     MonadBaseControl IO m,
     MonadResource m,
-    Failure H.HttpException m
-    ) => H.Manager -> String -> m (ResumableSource m S.ByteString)
+    Failure HttpException m
+    ) => Manager -> String -> m (C.ResumableSource m S.ByteString)
 fetchStream m url = do
-    req' <- H.parseUrl url
-    let req = req' { H.checkStatus = \_ _ _ -> Nothing }
+    req' <- CH.parseUrl url
+    let req = req' { CH.checkStatus = \_ _ _ -> Nothing }
 
     -- Caching hook here
     --  1. Check for cache value
@@ -663,9 +655,9 @@ fetchStream m url = do
     --  4. Return cached value
 
     exists <- liftIO $ cacheExists url
-    unless exists $ do
-        response <- H.http req m
-        H.responseBody response C.$$+- cacheSink url
+    CM.unless exists $ do
+        response <- CH.http req m
+        CH.responseBody response $$+- cacheSink url
 
         -- Stall the read for the prerequest wait time before moving ahead
         liftIO $ threadDelay $ 1000000 * fetchWaitTime
@@ -675,22 +667,22 @@ fetchStream m url = do
 cacheExists :: String -> IO Bool
 cacheExists = isFile . cacheFile
 
-cacheSource :: MonadResource m => String -> m (ResumableSource m S.ByteString)
+cacheSource :: MonadResource m => String -> m (C.ResumableSource m S.ByteString)
 cacheSource url = do
-    (a, b) <- (sourceFile $ cacheFile url) C.$$+ CL.take 0
+    (a, b) <- (CF.sourceFile $ cacheFile url) $$+ CL.take 0
     return a
 
-cacheSink :: MonadResource m => String -> Sink S.ByteString m ()
+cacheSink :: MonadResource m => String -> C.Sink S.ByteString m ()
 cacheSink url = do
     let fp = cacheFile url
 
     -- Let's create the cache if it does not exist.
     liftIO $ createTree $ FP.directory fp
 
-    sinkFile fp
+    CF.sinkFile fp
 
 cacheFile :: String -> FPO.FilePath
-cacheFile url = FPO.decodeString "./cache" FPO.</> (FPO.decode $ digestToHexByteString $ (hash $ US.fromString url :: Digest SHA512))
+cacheFile url = FPO.decodeString "./cache" </> (FPO.decode $ digestToHexByteString $ (hash $ US.fromString url :: Digest SHA512))
 
 
 
