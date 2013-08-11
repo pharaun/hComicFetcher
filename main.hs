@@ -36,7 +36,9 @@
         a. If cancel/exit, should delete/re-download the corrupt file
 -}
 import Data.Maybe
-import Data.List as DL
+import Data.List (isInfixOf, isPrefixOf, isSuffixOf)
+import qualified Data.List as DL
+import qualified Data.List.Split as SL
 import Control.Arrow.ArrowTree
 import Text.XML.HXT.Core
 
@@ -109,6 +111,8 @@ data Comic = Comic
     , indexList :: (ArrowXml a) => a XmlTree (String, (String, String))
     , chapterList :: (ArrowXml a) => a XmlTree (String, String)
     , chapterNextPage :: (ArrowXml a) => a XmlTree String
+
+    , chapterPage :: (ArrowXml a) => a b XmlTree -> a b (String, [String])
     }
 
 
@@ -143,6 +147,7 @@ exploitationNow = Comic
     , indexList = undefined
     , chapterList = undefined
     , chapterNextPage = undefined
+    , chapterPage = undefined
     }
 
 exploitationNowVol :: String -> String
@@ -211,12 +216,14 @@ girlGenius = Comic
         ) >. (fst . DL.break fst)
         >>> unlistA
         >>> arr snd
+        -- ) >>> arr ((SL.split . SL.keepDelimsL . SL.whenElt) (isPrefixOf "Chapter")) -- TODO: this is for splitting things up
 
 
     -- TODO: NOOP
     , indexList = undefined
     , chapterList = undefined
     , chapterNextPage = undefined
+    , chapterPage = undefined
     }
 
 girlGeniusVol :: String -> String
@@ -231,7 +238,7 @@ girlGeniusVol a = "Volume_" ++ show (wordToNumber (DL.reverse $ DL.head $ DL.wor
 errantStory = Comic
     { comicName = "Errant Story"
     , seedPage = "http://www.errantstory.com"
-    , seedType = Index
+    , seedType = VolIndex
 
     -- TODO: this is no-op because its a indexed/volume type of comic not sequal
     , nextPage = undefined
@@ -289,6 +296,8 @@ errantStory = Comic
         >>> hasName "a"
         >>> hasAttr "href"
         >>> getAttrValue "href"
+
+    , chapterPage = undefined
     }
 
 -- TODO:
@@ -306,6 +315,57 @@ buildUrlAndFilePathMapping root all@((_, (level, name)):xs)
         chapterMapping root (url, (_, name)) = (url, root FPO.</> (FPO.decodeString name))
 
 
+-- Gunnerkrigg Court
+gunnerkrigCourt = Comic
+    { comicName = "Gunnerkrigg Court"
+
+    , seedPage = "http://www.gunnerkrigg.com/archives/"
+    , seedType = ChpIndex
+
+    -- TODO: this is no-op because its a indexed/volume type of comic not sequal
+    , nextPage = undefined
+
+    , comic = undefined
+    , comicFileName = \filepath url ->
+        let base = FPO.decodeString "./gunnerkrigg_court"
+            fp   = FPO.decodeString filepath -- TODO: this probably should do some cleaning up
+            file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
+        in base FPO.</> fp FPO.</> file
+
+    -- TODO: this is a no-op because its not used, need to find a way to make it do nothing
+    , whichVolChp = undefined
+
+    , indexList = undefined
+    , chapterList = undefined
+    , chapterNextPage = undefined
+
+    , chapterPage = \doc -> listA (doc
+        //> hasAttrValue "class" (== "chapters")
+        >>> hasName "div"
+        >>> getChildren
+        >>> (
+                (
+                    hasName "a"
+                    >>> hasAttrValue "class" (== "chapter_button")
+                    /> hasName "h4"
+                )
+                `Text.XML.HXT.Core.orElse`
+                (
+                    hasName "select"
+                    >>> hasAttrValue "name" (== "page")
+                    >>> getChildren
+                    >>> hasName "option"
+                )
+            )
+        >>> ifA (hasName "h4") (getChildren >>> getText) (getAttrValue "value" >>> arr linkComic)
+        ) >>> arr ((SL.split . SL.keepDelimsL . SL.whenElt) (isPrefixOf "Chapter"))
+        >>> unlistA
+        >>> arr tupleComic
+        >>. arr catMaybes
+    }
+
+
+
 
 
 -- TODO:
@@ -315,7 +375,8 @@ main = do
 --    let target = errantStory
 --    let target = doesNotPlayWellWithOthers
 --    let target = exploitationNow
-    let target = girlGenius
+--    let target = girlGenius
+    let target = gunnerkrigCourt
 
     -- Queues for processing stuff
     -- TODO: look into tweaking this and making the indexed parser not deadlock the whole thing... if there's more to add to the queue than can be processed
@@ -346,10 +407,19 @@ data ReplyType  = WebpageReply UL.ByteString Tag
 
 -- Additional information tags to tag on a webpage Request
 data Tag = Serial  -- Page by page fetching
-         | Index   -- Index page
+         | VolIndex   -- Volume Index page
+         | ChpIndex   -- Chp Index page
          | Chapter FPO.FilePath -- Entire chapters page
          | Page FPO.FilePath   -- single comic page
 
+linkComic :: String -> String
+linkComic u = "http://www.gunnerkrigg.com/comics/" ++ padNum u ++ ".jpg"
+    where
+        padNum n = (DL.concat $ DL.take (8 - DL.length u) (DL.repeat "0")) ++ n
+
+tupleComic :: [String] -> Maybe (String, [String])
+tupleComic [] = Nothing
+tupleComic (x:xs) = Just (x, xs)
 
 -- Indexer parser,
 -- The mother of all parser, it parses various Tagged pages and then go from there
@@ -361,7 +431,29 @@ indexedParser c i o = do
     r <- atomically $ readTBMChan i
     case r of
         Nothing -> return False
-        (Just (WebpageReply html Index)) -> do
+        (Just (WebpageReply html ChpIndex)) -> do
+            -- HXT
+            let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
+
+            chpPages <- runX $ (chapterPage c) doc
+            -- HXT
+
+            -- TODO: this step isn't working correctly. validate what its doing.
+            --  1. Probably being limited by the queue length and blocking here, tho fetcher should work?
+            atomically $ mapM_ (writeTBMChan o) (DL.concatMap (\(chp, img) -> map (\i -> Image i ((comicFileName c) chp i)) img) chpPages)
+
+            -- Terminate since we know we are done.
+            -- This does not work if there's multiple parser/worker going but it'll be ok for this poc
+            atomically $ closeTBMChan o
+
+            -- Dump list of Comic page fetched
+            putStrLn "Chp list:"
+            mapM_ (putStrLn . fst) chpPages
+
+            -- We do want to keep going cos we just submitted another page to fetch
+            return True
+
+        (Just (WebpageReply html VolIndex)) -> do
             -- HXT
             let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
 
@@ -595,7 +687,7 @@ untilM_ f p = do
 -- Process a sequence of english number into an integer value
 -- If invalid/incomplete/what so not it will return a 0
 wordToNumber :: String -> Integer
-wordToNumber = foldl' compute 0 . (map T.unpack) . T.words . T.toLower . T.pack
+wordToNumber = DL.foldl' compute 0 . (map T.unpack) . T.words . T.toLower . T.pack
     where
         compute :: Integer -> String -> Integer
         compute prior word =
