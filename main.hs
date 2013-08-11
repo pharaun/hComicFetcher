@@ -151,13 +151,12 @@ exploitationNow = Comic
     }
 
 exploitationNowVol :: String -> String
-exploitationNowVol "single-category-act-one"         = "vol-1_act-one"
-exploitationNowVol "single-category-act-two"         = "vol-2_act-two"
-exploitationNowVol ""                                = "vol-3"
-exploitationNowVol "single-category-intermission-i"  = "vol-4_intermission-I"
-exploitationNowVol "single-category-act-three"       = "vol-5_act-three"
-exploitationNowVol "single-category-intermission-ii" = "vol-6_intermission-II"
-exploitationNowVol "single-category-act-four"        = "vol-7_act-four"
+exploitationNowVol "single-category-act-one"         = "Volume 1: Act One"
+exploitationNowVol "single-category-act-two"         = "Volume 2: Act Two"
+exploitationNowVol "single-category-intermission-i"  = "Volume 3: Intermission I"
+exploitationNowVol "single-category-act-three"       = "Volume 4: Act Three"
+exploitationNowVol "single-category-intermission-ii" = "Volume 5: Intermission II"
+exploitationNowVol "single-category-act-four"        = "Volume 6: Act Four"
 exploitationNowVol _ = "Unknown"
 
 
@@ -227,7 +226,7 @@ girlGenius = Comic
     }
 
 girlGeniusVol :: String -> String
-girlGeniusVol a = "Volume_" ++ show (wordToNumber (DL.reverse $ DL.head $ DL.words $ DL.drop 3 $ DL.reverse a))
+girlGeniusVol a = fixVolChp $ "Volume " ++ show (wordToNumber (DL.reverse $ DL.head $ DL.words $ DL.drop 3 $ DL.reverse a))
 
 
 --
@@ -328,7 +327,7 @@ gunnerkrigCourt = Comic
     , comic = undefined
     , comicFileName = \filepath url ->
         let base = FPO.decodeString "./gunnerkrigg_court"
-            fp   = FPO.decodeString filepath -- TODO: this probably should do some cleaning up
+            fp   = FPO.decodeString $ fixVolChp filepath
             file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
         in base FPO.</> fp FPO.</> file
 
@@ -364,19 +363,43 @@ gunnerkrigCourt = Comic
         >>. arr catMaybes
     }
 
-
-
+-- TODO: Bit cheap but this works for fixing up "Chapter 1" -> "Chapter 01"
+-- TODO: Bit cheap but this works for fixing up "Volume 1" -> "Volume 01"
+fixVolChp :: String -> String
+fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'0':xs) = "Volume " ++ [x] ++ "0" ++ xs
+fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'1':xs) = "Volume " ++ [x] ++ "1" ++ xs
+fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'2':xs) = "Volume " ++ [x] ++ "2" ++ xs
+fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'3':xs) = "Volume " ++ [x] ++ "3" ++ xs
+fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'4':xs) = "Volume " ++ [x] ++ "4" ++ xs
+fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'5':xs) = "Volume " ++ [x] ++ "5" ++ xs
+fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'6':xs) = "Volume " ++ [x] ++ "6" ++ xs
+fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'7':xs) = "Volume " ++ [x] ++ "7" ++ xs
+fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'8':xs) = "Volume " ++ [x] ++ "8" ++ xs
+fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'9':xs) = "Volume " ++ [x] ++ "9" ++ xs
+fixVolChp ('V':'o':'l':'u':'m':'e':' ':xs) = "Volume 0" ++ xs
+fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'0':xs) = "Chapter " ++ [x] ++ "0" ++ xs
+fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'1':xs) = "Chapter " ++ [x] ++ "1" ++ xs
+fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'2':xs) = "Chapter " ++ [x] ++ "2" ++ xs
+fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'3':xs) = "Chapter " ++ [x] ++ "3" ++ xs
+fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'4':xs) = "Chapter " ++ [x] ++ "4" ++ xs
+fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'5':xs) = "Chapter " ++ [x] ++ "5" ++ xs
+fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'6':xs) = "Chapter " ++ [x] ++ "6" ++ xs
+fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'7':xs) = "Chapter " ++ [x] ++ "7" ++ xs
+fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'8':xs) = "Chapter " ++ [x] ++ "8" ++ xs
+fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'9':xs) = "Chapter " ++ [x] ++ "9" ++ xs
+fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':xs) = "Chapter 0" ++ xs
+fixVolChp xs = xs
 
 
 -- TODO:
 --  - Defined stop point, Errant Story
 --  - Some command line arg for picking which comic to run
 main = do
---    let target = errantStory
+    let target = exploitationNow
 --    let target = doesNotPlayWellWithOthers
---    let target = exploitationNow
+--    let target = errantStory
 --    let target = girlGenius
-    let target = gunnerkrigCourt
+--    let target = gunnerkrigCourt
 
     -- Queues for processing stuff
     -- TODO: look into tweaking this and making the indexed parser not deadlock the whole thing... if there's more to add to the queue than can be processed
