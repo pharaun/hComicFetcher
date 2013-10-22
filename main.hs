@@ -35,7 +35,6 @@
 -}
 
 import Data.Conduit (($=), ($$), ($$+), ($$+-), MonadBaseControl, MonadResource)
-
 import qualified Data.Conduit as C
 import qualified Data.Conduit.Filesystem as CF
 import qualified Data.Conduit.List as CL
@@ -44,13 +43,11 @@ import qualified Data.Conduit.TMChan as CT
 import Network (withSocketsDo)
 import Network.HTTP.Types.URI (decodePathSegments)
 import Network.HTTP.Conduit (HttpException, Manager)
-
 import qualified Network.HTTP.Conduit as CH
 
 import Data.Maybe (catMaybes)
 
 import Data.List (isInfixOf, isPrefixOf, isSuffixOf)
-
 import qualified Data.List as DL
 import qualified Data.List.Split as SL
 
@@ -72,7 +69,6 @@ import qualified Data.ByteString.UTF8 as US
 
 import Filesystem (createTree, isFile)
 import Filesystem.Path.CurrentOS ((</>))
-
 import qualified Filesystem.Path as FP
 import qualified Filesystem.Path.CurrentOS as FPO
 
@@ -383,6 +379,80 @@ fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':xs) = "Chapter 0" ++ xs
 fixVolChp xs = xs
 
 
+-- Filesystem format - SiteName/StoryName/Volume/Chapter/Page.*
+--
+-- Other stuff - webcomic
+-- 1. Sequal scan (no vol/chp/etc) - Px
+-- 2. Chp - CxPx
+-- 3. Vol - VxPx
+-- 4. (Story/Track) Vol Chp - SxVxCxPx
+-- 5. Vol Act Intermission - VxPx - Act/Intermission can act as a title
+--
+-- 6. Manga - CxPx, VxCxPx, V(TBD)xCxPx etc... (Probably has story track
+--      too for multi story mangas)
+--
+-- 7. There can be named volumes, named chapters. Don't think i've seen
+--      named pages (special pages such as cover, etc)
+--
+--
+-- There is probably some common logic that can be employed for this stuff
+-- ^ but majority of it is going to be figuring out how to extract useful
+-- semantics, There seems to be several format/manner of indexing/paging.
+--
+-- 1. Sequal Paging
+-- 2. Sequal Volume/Chapter paging
+-- 3. Chunked/indexed volume/chapter pages
+-- 4.
+
+
+
+-- Seems like we can just hit the main page to find a chapter/volume to go
+-- to then parse it out of the dropdown.
+--
+-- Format:
+-- Vol 12 Ch 079: Name &amp; V
+-- Vol TBD Ch 353: Foobar stuff
+-- Ch 087: weird
+-- Ch 000
+--
+-- Need to special case the case in which its Licensed and thus not
+-- available for downloading
+--
+-- Most other sites seems to be mainly:
+-- Chp 342
+--
+-- Flow
+--  - Get index page (to make pick up new manga easy)
+--  - Make sure its not already licensed (re index page or vol/chp page)
+--  - Pick first page/chp/vol and load that to get drop down list, submit
+--      one chp fetcher per line in that list
+
+
+-- MangaFox
+mangaFox = Comic
+    { comicName = "MangaFox"
+    , seedPage = "http://mangafox.me/manga/yotsubato/"
+    , seedType = VolChpIndex
+
+    , nextPage = undefined
+
+    , comic = undefined
+    , comicFileName = \_ url ->
+        let base = FPO.decodeString "./manga_fox/yotsubato"
+            file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
+        in base </> file
+
+    , whichVolChp = undefined
+    , indexList = undefined
+    , chapterList = undefined
+    , chapterNextPage = undefined
+    , chapterPage = undefined
+    }
+
+
+
+
+
 -- TODO:
 --  - Defined stop point, Errant Story
 --  - Some command line arg for picking which comic to run
@@ -391,7 +461,8 @@ main = do
 --    let target = doesNotPlayWellWithOthers
 --    let target = errantStory
 --    let target = girlGenius
-    let target = gunnerkrigCourt
+--    let target = gunnerkrigCourt
+    let target = mangaFox
 
     -- Queues for processing stuff
     -- TODO: look into tweaking this and making the indexed parser not deadlock the whole thing... if there's more to add to the queue than can be processed
@@ -422,6 +493,7 @@ data ReplyType  = WebpageReply UL.ByteString Tag
 
 -- Additional information tags to tag on a webpage Request
 data Tag = Serial  -- Page by page fetching
+         | VolChpIndex   -- Volume Chp Index page
          | VolIndex   -- Volume Index page
          | ChpIndex   -- Chp Index page
          | Chapter FPO.FilePath -- Entire chapters page
