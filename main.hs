@@ -85,8 +85,6 @@ data Comic = Comic
 
     , nextPage :: (ArrowXml a) => a XmlTree String
     , comic :: (ArrowXml a) => a XmlTree String
-    -- Add support for FPO.FilePath instead of only strings
-    , comicFileName :: String -> String -> FPO.FilePath
     -- Identify act (vol 1, 2) via body (class) - single-category-act-four ...
     , whichVolChp :: (ArrowXml a) => a b XmlTree -> a b String
 
@@ -96,6 +94,11 @@ data Comic = Comic
     , chapterNextPage :: (ArrowXml a) => a XmlTree String
 
     , chapterPage :: (ArrowXml a) => a b XmlTree -> a b (String, [String])
+
+    -- TODO: first step is cleaning up the ComicTag Generation for
+    -- outputting, then we can look into fixing up the Tags
+    , comicFileName :: String -> String -> ComicTag
+    , comicTagFileName :: ComicTag -> String -> ComicTag
     }
 
 
@@ -110,11 +113,10 @@ exploitationNow = Comic
     , seedType = Serial
     , nextPage = hasName "a" >>> hasAttrValue "class" (isInfixOf "navi-next") >>> hasAttr "href" >>> getAttrValue "href"
     , comic = hasAttrValue "id" (== "comic") >>> hasName "div" //> hasName "img" >>> hasAttr "src" >>> getAttrValue "src"
-    , comicFileName = \vol url ->
-        let base = FPO.decodeString "./exploitation_now"
-            file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
-            dirs = FPO.fromText $ T.pack $ exploitationNowVol vol
-        in base </> dirs </> file
+
+    , comicFileName = \vol url -> ComicTag (T.pack "exploitation_now") Nothing (exploitationNowVol vol) Nothing (Just $ last $ decodePathSegments $ US.fromString url)
+    , comicTagFileName = undefined
+
     , whichVolChp = \doc -> doc
         //> hasName "body"
         >>> hasAttr "class"
@@ -133,14 +135,14 @@ exploitationNow = Comic
     , chapterPage = undefined
     }
 
-exploitationNowVol :: String -> String
-exploitationNowVol "single-category-act-one"         = "Volume 1: Act One"
-exploitationNowVol "single-category-act-two"         = "Volume 2: Act Two"
-exploitationNowVol "single-category-intermission-i"  = "Volume 3: Intermission I"
-exploitationNowVol "single-category-act-three"       = "Volume 4: Act Three"
-exploitationNowVol "single-category-intermission-ii" = "Volume 5: Intermission II"
-exploitationNowVol "single-category-act-four"        = "Volume 6: Act Four"
-exploitationNowVol _ = "Unknown"
+exploitationNowVol :: String -> Maybe UnitTag
+exploitationNowVol "single-category-act-one"         = Just $ UnitTag 1 $ Just $ T.pack "Act One"
+exploitationNowVol "single-category-act-two"         = Just $ UnitTag 2 $ Just $ T.pack "Act Two"
+exploitationNowVol "single-category-intermission-i"  = Just $ UnitTag 3 $ Just $ T.pack "Intermission I"
+exploitationNowVol "single-category-act-three"       = Just $ UnitTag 4 $ Just $ T.pack "Act Three"
+exploitationNowVol "single-category-intermission-ii" = Just $ UnitTag 5 $ Just $ T.pack "Intermission II"
+exploitationNowVol "single-category-act-four"        = Just $ UnitTag 6 $ Just $ T.pack "Act Four"
+exploitationNowVol _ = Nothing
 
 
 -- Does Not Play Well With Others
@@ -148,14 +150,14 @@ doesNotPlayWellWithOthers = exploitationNow
     { comicName = "Does Not Play Well With Others"
     , seedPage = "http://www.doesnotplaywellwithothers.com/comics/pwc-000f"
     , seedType = Serial
-    , comicFileName = \_ url ->
-        let base = FPO.decodeString "./does_not_play_well_with_others"
-            file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
-        in base </> file
 
     -- TODO: this is a no-op because its not used, need to find a way to make it do nothing
     --  This can't be undefined because its still invokved
     , whichVolChp = \doc -> doc //> hasName "body" >>> hasAttr "class" >>> getAttrValue "class"
+
+
+    , comicTagFileName = undefined
+    , comicFileName = \_ url -> ComicTag (T.pack "./does_not_play_well_with_others") Nothing Nothing Nothing (Just $ last $ decodePathSegments $ US.fromString url)
     }
 
 
@@ -175,12 +177,6 @@ girlGenius = Comic
         >>> getAttrValue "src"
         >>. arr (filter (isPrefixOf "http"))
 
-
-    , comicFileName = \vol url ->
-        let base = FPO.decodeString "./girl_genius"
-            file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
-            dirs = FPO.fromText $ T.pack $ girlGeniusVol vol
-        in base </> dirs </> file
 
     -- TODO: this returns a single string (cuz its concating all of this), we worked around this but this is very much non-ideal
     --  For workaround see girlGeniusVol
@@ -206,10 +202,17 @@ girlGenius = Comic
     , chapterList = undefined
     , chapterNextPage = undefined
     , chapterPage = undefined
+
+
+    , comicTagFileName = undefined
+    , comicFileName = \vol url ->
+        ComicTag (T.pack "girl_genius") Nothing (Just $ UnitTag (girlGeniusVol vol) Nothing) Nothing (Just $ last $ decodePathSegments $ US.fromString url)
     }
 
-girlGeniusVol :: String -> String
-girlGeniusVol a = fixVolChp $ "Volume " ++ show (wordToNumber (DL.reverse $ DL.head $ DL.words $ DL.drop 3 $ DL.reverse a))
+girlGeniusVol :: String -> Integer
+girlGeniusVol a = wordToNumber (DL.reverse $ DL.head $ DL.words $ DL.drop 3 $ DL.reverse a)
+
+
 
 
 --
@@ -226,11 +229,6 @@ errantStory = Comic
     , nextPage = undefined
 
     , comic = hasAttrValue "id" (== "comic") >>> hasName "div" //> hasName "img" >>> hasAttr "src" >>> getAttrValue "src"
-    , comicFileName = \filepath url ->
-        let base = FPO.decodeString "./errant_story"
-            fp   = FPO.decodeString filepath
-            file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
-        in base </> fp </> file
 
     -- TODO: this is a no-op because its not used, need to find a way to make it do nothing
     , whichVolChp = undefined
@@ -280,21 +278,47 @@ errantStory = Comic
         >>> getAttrValue "href"
 
     , chapterPage = undefined
+
+
+    , comicTagFileName = undefined
+--     \filepath url ->
+--        let base = FPO.decodeString "./errant_story"
+--            fp   = FPO.decodeString filepath
+--            file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
+--        in base </> fp </> file
+
+
+    , comicFileName = undefined
     }
 
--- TODO:
---  1. Mangle it to filter out the Commentary track (in an easy/useful way?)
---  2. Get rid of "Errant Story" part, and lower case/mabye shorten volume to vol-7/chp-2/files
-buildUrlAndFilePathMapping :: FPO.FilePath -> [(Url, (String, String))] -> [(Url, FPO.FilePath)]
-buildUrlAndFilePathMapping _ [] = []
-buildUrlAndFilePathMapping root all@((_, (level, name)):xs)
-    | level == "level-3" = map (chapterMapping root) all
-    | otherwise          =
-        let ours = DL.takeWhile (\a -> (fst $ snd a) /= level) xs
-            rest = filter (not . flip elem ours) xs
-        in buildUrlAndFilePathMapping (root </> (FPO.decodeString name)) ours ++ buildUrlAndFilePathMapping (root) rest
-    where
-        chapterMapping root (url, (_, name)) = (url, root </> (FPO.decodeString name))
+buildUrlAndComicTagMapping :: ComicTag -> [(Url, (String, String))] -> [(Url, ComicTag)]
+--buildUrlAndComicTagMapping :: FPO.FilePath -> [(Url, (String, String))] -> [(Url, FPO.FilePath)]
+buildUrlAndComicTagMapping _ [] = []
+buildUrlAndComicTagMapping root all@((_, (level, name)):xs)
+     | level == "level-3" = map (chapterMapping root) all
+     | otherwise          =
+         let ours = DL.takeWhile (\a -> (fst $ snd a) /= level) xs
+             rest = filter (not . flip elem ours) xs
+         in buildUrlAndComicTagMapping (root </> (FPO.decodeString name)) ours ++ buildUrlAndComicTagMapping (root) rest
+     where
+         chapterMapping root (url, (_, name)) = (url, root </> (FPO.decodeString name))
+
+-- data ComicTag = ComicTag
+--     { ctSiteName :: String
+--     , ctStoryName :: Maybe String
+--
+--     , ctVolume :: Maybe UnitTag
+--     , ctChapter :: Maybe UnitTag
+--     , ctFileName :: Maybe String
+--     }
+--
+-- data UnitTag = UnitTag
+--     { utNumber :: Integer
+--     , utTitle :: Maybe String
+--     }
+--
+
+
 
 
 -- Gunnerkrigg Court
@@ -308,11 +332,6 @@ gunnerkrigCourt = Comic
     , nextPage = undefined
 
     , comic = undefined
-    , comicFileName = \filepath url ->
-        let base = FPO.decodeString "./gunnerkrigg_court"
-            fp   = FPO.decodeString $ fixVolChp filepath
-            file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
-        in base </> fp </> file
 
     -- TODO: this is a no-op because its not used, need to find a way to make it do nothing
     , whichVolChp = undefined
@@ -344,106 +363,67 @@ gunnerkrigCourt = Comic
         >>> unlistA
         >>> arr tupleComic
         >>. arr catMaybes
+
+
+    , comicTagFileName = undefined
+    , comicFileName = \filepath url ->
+        let (chp, name) = fixChp filepath
+        in ComicTag (T.pack "gunnerkrigg_court") Nothing Nothing (Just $ UnitTag chp $ Just $ T.pack name) (Just $ last $ decodePathSegments $ US.fromString url)
     }
 
--- TODO: Bit cheap but this works for fixing up "Chapter 1" -> "Chapter 01"
--- TODO: Bit cheap but this works for fixing up "Volume 1" -> "Volume 01"
-fixVolChp :: String -> String
-fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'0':xs) = "Volume " ++ [x] ++ "0" ++ xs
-fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'1':xs) = "Volume " ++ [x] ++ "1" ++ xs
-fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'2':xs) = "Volume " ++ [x] ++ "2" ++ xs
-fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'3':xs) = "Volume " ++ [x] ++ "3" ++ xs
-fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'4':xs) = "Volume " ++ [x] ++ "4" ++ xs
-fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'5':xs) = "Volume " ++ [x] ++ "5" ++ xs
-fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'6':xs) = "Volume " ++ [x] ++ "6" ++ xs
-fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'7':xs) = "Volume " ++ [x] ++ "7" ++ xs
-fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'8':xs) = "Volume " ++ [x] ++ "8" ++ xs
-fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'9':xs) = "Volume " ++ [x] ++ "9" ++ xs
-fixVolChp ('V':'o':'l':'u':'m':'e':' ':xs) = "Volume 0" ++ xs
-fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'0':xs) = "Chapter " ++ [x] ++ "0" ++ xs
-fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'1':xs) = "Chapter " ++ [x] ++ "1" ++ xs
-fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'2':xs) = "Chapter " ++ [x] ++ "2" ++ xs
-fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'3':xs) = "Chapter " ++ [x] ++ "3" ++ xs
-fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'4':xs) = "Chapter " ++ [x] ++ "4" ++ xs
-fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'5':xs) = "Chapter " ++ [x] ++ "5" ++ xs
-fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'6':xs) = "Chapter " ++ [x] ++ "6" ++ xs
-fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'7':xs) = "Chapter " ++ [x] ++ "7" ++ xs
-fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'8':xs) = "Chapter " ++ [x] ++ "8" ++ xs
-fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'9':xs) = "Chapter " ++ [x] ++ "9" ++ xs
-fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':xs) = "Chapter 0" ++ xs
-fixVolChp xs = xs
+linkComic :: String -> String
+linkComic u = "http://www.gunnerkrigg.com/comics/" ++ padNum u ++ ".jpg"
+    where
+        padNum n = (DL.concat $ DL.take (8 - DL.length u) (DL.repeat "0")) ++ n
+
+tupleComic :: [String] -> Maybe (String, [String])
+tupleComic [] = Nothing
+tupleComic (x:xs) = Just (x, xs)
+
+fixChp :: String -> (Integer, String)
+fixChp = extract . cleanChapter
+
+extract :: String -> (Integer, String)
+extract ('C':'h':'a':'p':'t':'e':'r':' ':a:b:':':' ':xs) = (read $ [a, b], xs)
+
+-- TODO: this is terribad but it'll let us have consistent chp/vol stuff
+-- for cheap extracting
+cleanChapter :: String -> String
+cleanChapter ('C':'h':'a':'p':'t':'e':'r':' ':x:'0':xs) = "Chapter " ++ [x] ++ "0" ++ xs
+cleanChapter ('C':'h':'a':'p':'t':'e':'r':' ':x:'1':xs) = "Chapter " ++ [x] ++ "1" ++ xs
+cleanChapter ('C':'h':'a':'p':'t':'e':'r':' ':x:'2':xs) = "Chapter " ++ [x] ++ "2" ++ xs
+cleanChapter ('C':'h':'a':'p':'t':'e':'r':' ':x:'3':xs) = "Chapter " ++ [x] ++ "3" ++ xs
+cleanChapter ('C':'h':'a':'p':'t':'e':'r':' ':x:'4':xs) = "Chapter " ++ [x] ++ "4" ++ xs
+cleanChapter ('C':'h':'a':'p':'t':'e':'r':' ':x:'5':xs) = "Chapter " ++ [x] ++ "5" ++ xs
+cleanChapter ('C':'h':'a':'p':'t':'e':'r':' ':x:'6':xs) = "Chapter " ++ [x] ++ "6" ++ xs
+cleanChapter ('C':'h':'a':'p':'t':'e':'r':' ':x:'7':xs) = "Chapter " ++ [x] ++ "7" ++ xs
+cleanChapter ('C':'h':'a':'p':'t':'e':'r':' ':x:'8':xs) = "Chapter " ++ [x] ++ "8" ++ xs
+cleanChapter ('C':'h':'a':'p':'t':'e':'r':' ':x:'9':xs) = "Chapter " ++ [x] ++ "9" ++ xs
+cleanChapter ('C':'h':'a':'p':'t':'e':'r':' ':xs) = "Chapter 0" ++ xs
+cleanChapter xs = xs
 
 
 
 
--- Filesystem format - SiteName/StoryName/Volume/Chapter/Page.*
---
--- Other stuff - webcomic
--- 1. Sequal scan (no vol/chp/etc) - Px
--- 2. Chp - CxPx
--- 3. Vol - VxPx
--- 4. (Story/Track) Vol Chp - SxVxCxPx
--- 5. Vol Act Intermission - VxPx - Act/Intermission can act as a title
---
--- 6. Manga - CxPx, VxCxPx, V(TBD)xCxPx etc... (Probably has story track
---      too for multi story mangas)
---
--- 7. There can be named volumes, named chapters. Don't think i've seen
---      named pages (special pages such as cover, etc)
---
---
--- There is probably some common logic that can be employed for this stuff
--- ^ but majority of it is going to be figuring out how to extract useful
--- semantics, There seems to be several format/manner of indexing/paging.
---
--- 1. Sequal Paging
--- 2. Sequal Volume/Chapter paging
--- 3. Chunked/indexed volume/chapter pages
--- 4.
-
-
-
--- Seems like we can just hit the main page to find a chapter/volume to go
--- to then parse it out of the dropdown.
---
--- Format:
--- Vol 12 Ch 079: Name &amp; V
--- Vol TBD Ch 353: Foobar stuff
--- Ch 087: weird
--- Ch 000
---
--- Need to special case the case in which its Licensed and thus not
--- available for downloading
---
--- Most other sites seems to be mainly:
--- Chp 342
---
--- Flow
---  - Get index page (to make pick up new manga easy)
---  - Make sure its not already licensed (re index page or vol/chp page)
---  - Pick first page/chp/vol and load that to get drop down list, submit
---      one chp fetcher per line in that list
-
-
--- MangaFox
-mangaFox = Comic
-    { comicName = "MangaFox"
-    , seedPage = "http://mangafox.me/manga/yotsubato/"
+-- Batoto
+batoto = Comic
+    { comicName = "Batoto"
+    , seedPage = "http://www.batoto.net/comic/_/comics/yotsubato-r311"
     , seedType = VolChpIndex
 
     , nextPage = undefined
 
     , comic = undefined
-    , comicFileName = \_ url ->
-        let base = FPO.decodeString "./manga_fox/yotsubato"
-            file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
-        in base </> file
 
     , whichVolChp = undefined
     , indexList = undefined
     , chapterList = undefined
     , chapterNextPage = undefined
     , chapterPage = undefined
+
+    , comicTagFileName = undefined
+    , comicFileName = \_ url ->
+        ComicTag (T.pack "batoto") (Just $ T.pack "yotsubato") Nothing Nothing Nothing
     }
 
 
@@ -459,7 +439,7 @@ main = do
 --    let target = errantStory
 --    let target = girlGenius
 --    let target = gunnerkrigCourt
-    let target = mangaFox
+    let target = batoto
 
     -- Queues for processing stuff
     -- TODO: look into tweaking this and making the indexed parser not deadlock the whole thing... if there's more to add to the queue than can be processed
@@ -479,16 +459,6 @@ main = do
     killThread threadId
 
 
-
-
-linkComic :: String -> String
-linkComic u = "http://www.gunnerkrigg.com/comics/" ++ padNum u ++ ".jpg"
-    where
-        padNum n = (DL.concat $ DL.take (8 - DL.length u) (DL.repeat "0")) ++ n
-
-tupleComic :: [String] -> Maybe (String, [String])
-tupleComic [] = Nothing
-tupleComic (x:xs) = Just (x, xs)
 
 -- Indexer parser,
 -- The mother of all parser, it parses various Tagged pages and then go from there
@@ -522,6 +492,10 @@ indexedParser c i o = do
             -- We do want to keep going cos we just submitted another page to fetch
             return True
 
+
+
+
+-- This mess is all errant story's mess
         (Just (WebpageReply html VolIndex)) -> do
             -- HXT
             let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
@@ -530,7 +504,8 @@ indexedParser c i o = do
             -- HXT
 
             -- TODO: have a pre-process step for processing the parsing results into a useful list for dumping into TBMChans
-            let list = buildUrlAndFilePathMapping (FP.empty) index
+            let defaultErrantStory = ComicTag (T.pack "errant_story") Nothing Nothing Nothing Nothing
+            let list = buildUrlAndComicTagMapping defaultErrantStory index
 
             -- Dump list of Comic page fetched
             putStrLn "Chp list:"
@@ -543,7 +518,7 @@ indexedParser c i o = do
             -- We do want to keep going cos we just submitted another page to fetch
             return True
 
-        (Just (WebpageReply html (Chapter fp))) -> do
+        (Just (WebpageReply html (Chapter ct))) -> do
             -- HXT
             let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
 
@@ -552,12 +527,12 @@ indexedParser c i o = do
             -- HXT
 
             -- Dump the next pages into the queue
-            atomically $ mapM_ (writeTBMChan o) (map (\a -> Webpage a (Chapter fp)) next)
+            atomically $ mapM_ (writeTBMChan o) (map (\a -> Webpage a (Chapter ct)) next)
 
             -- Dump the single page into the queue
             -- TODO:
             --  1. Do something with the name of the page (Chapter 42: foobar) (not on all pages unfortunately)
-            atomically $ mapM_ (writeTBMChan o) (map (\a -> Webpage (fst a) (Page fp)) chp)
+            atomically $ mapM_ (writeTBMChan o) (map (\a -> Webpage (fst a) (Page ct)) chp)
 
             -- Do we have any comic we want to store to disk?
             putStrLn "Chp list:"
@@ -569,14 +544,14 @@ indexedParser c i o = do
             -- We do want to keep going cos we just submitted another page to fetch
             return True
 
-        (Just (WebpageReply html (Page fp))) -> do
+        (Just (WebpageReply html (Page ct))) -> do
             -- HXT
             let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
 
             img <- runX $ doc //> (comic c)
             -- HXT
 
-            atomically $ mapM_ (writeTBMChan o) (map (\a -> Image a $ (comicFileName c) (FPO.encodeString fp) a) img)
+            atomically $ mapM_ (writeTBMChan o) (map (\a -> Image a $ (comicTagFileName c) ct a) img)
 
             -- TODO: probably want to have a way to identify when all of the fetching is done and parsing is done and die
             --  1. But it needs to allow for *long* parsing pauses and long fetching pauses in case of network issues or slow parser step
@@ -590,6 +565,12 @@ indexedParser c i o = do
 
             -- We do want to keep going cos we just submitted another page to fetch
             return True
+
+
+
+
+
+
 
         (Just (WebpageReply html Serial)) -> do
             -- HXT
