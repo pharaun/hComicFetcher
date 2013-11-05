@@ -37,9 +37,14 @@ import qualified Filesystem.Path.CurrentOS as FPO
 import Crypto.Hash (digestToHexByteString, hash, Digest, SHA512)
 
 
+import Data.Maybe
+import qualified Data.List as DL
+import qualified Data.Text as T
+
 
 -- Local types
 import Types
+
 
 
 -- Seconds to wait between each request to this site
@@ -52,36 +57,41 @@ fetchWaitTime = 1
 
 -- TODO: Find a better home for this
 comicTagToFilePath :: ComicTag -> FPO.FilePath
-comicTagToFilePath = undefined
+comicTagToFilePath ct = DL.foldl (</>) (FPO.decodeString "./") (DL.filter (not . FP.null)
+    -- Site Name
+    [ FPO.fromText (ctSiteName ct)
 
--- TODO: Bit cheap but this works for fixing up "Chapter 1" -> "Chapter 01"
--- TODO: Bit cheap but this works for fixing up "Volume 1" -> "Volume 01"
-fixVolChp :: String -> String
-fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'0':xs) = "Volume " ++ [x] ++ "0" ++ xs
-fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'1':xs) = "Volume " ++ [x] ++ "1" ++ xs
-fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'2':xs) = "Volume " ++ [x] ++ "2" ++ xs
-fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'3':xs) = "Volume " ++ [x] ++ "3" ++ xs
-fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'4':xs) = "Volume " ++ [x] ++ "4" ++ xs
-fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'5':xs) = "Volume " ++ [x] ++ "5" ++ xs
-fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'6':xs) = "Volume " ++ [x] ++ "6" ++ xs
-fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'7':xs) = "Volume " ++ [x] ++ "7" ++ xs
-fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'8':xs) = "Volume " ++ [x] ++ "8" ++ xs
-fixVolChp ('V':'o':'l':'u':'m':'e':' ':x:'9':xs) = "Volume " ++ [x] ++ "9" ++ xs
-fixVolChp ('V':'o':'l':'u':'m':'e':' ':xs) = "Volume 0" ++ xs
-fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'0':xs) = "Chapter " ++ [x] ++ "0" ++ xs
-fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'1':xs) = "Chapter " ++ [x] ++ "1" ++ xs
-fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'2':xs) = "Chapter " ++ [x] ++ "2" ++ xs
-fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'3':xs) = "Chapter " ++ [x] ++ "3" ++ xs
-fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'4':xs) = "Chapter " ++ [x] ++ "4" ++ xs
-fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'5':xs) = "Chapter " ++ [x] ++ "5" ++ xs
-fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'6':xs) = "Chapter " ++ [x] ++ "6" ++ xs
-fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'7':xs) = "Chapter " ++ [x] ++ "7" ++ xs
-fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'8':xs) = "Chapter " ++ [x] ++ "8" ++ xs
-fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':x:'9':xs) = "Chapter " ++ [x] ++ "9" ++ xs
-fixVolChp ('C':'h':'a':'p':'t':'e':'r':' ':xs) = "Chapter 0" ++ xs
-fixVolChp xs = xs
+    -- Story Name
+    , case (ctStoryName ct) of
+        Nothing -> FP.empty
+        Just x  -> FPO.fromText x
 
+    -- Volume
+    , case (ctVolume ct) of
+        Nothing -> FP.empty
+        Just x  -> unitTagToFilePath UnitTagVolume x
 
+    -- Chapter
+    , case (ctChapter ct) of
+        Nothing -> FP.empty
+        Just x  -> unitTagToFilePath UnitTagChapter x
+
+    -- TODO: this fromJust is bad news
+    , FPO.fromText (fromJust $ ctFileName ct)
+    ])
+
+    where
+        unitTagToFilePath :: UnitTagType -> UnitTag -> FPO.FilePath
+        unitTagToFilePath UnitTagVolume ut  = unitTagString (T.pack "Volume ") ut
+        unitTagToFilePath UnitTagChapter ut = unitTagString (T.pack "Chapter ") ut
+
+        -- TODO: need to add zero padding
+        unitTagString :: T.Text -> UnitTag -> FPO.FilePath
+        unitTagString s UnitTag{utNumber=issue, utTitle=name} = FPO.fromText (s `T.append` (T.pack $ show issue) `T.append` (
+            case name of
+                Nothing -> T.empty
+                Just x  -> (T.pack ": ") `T.append` x
+            ))
 
 
 

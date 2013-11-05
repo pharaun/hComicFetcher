@@ -53,9 +53,7 @@ import qualified Data.Text as T
 import qualified Data.ByteString.Lazy.UTF8 as UL
 import qualified Data.ByteString.UTF8 as US
 
-import Filesystem.Path.CurrentOS ((</>))
-import qualified Filesystem.Path as FP
-import qualified Filesystem.Path.CurrentOS as FPO
+import Control.Exception (throw)
 
 
 -- Local imports
@@ -118,7 +116,7 @@ doesNotPlayWellWithOthers = exploitationNow
 
 
     , comicTagFileName = undefined
-    , comicFileName = \_ url -> ComicTag (T.pack "./does_not_play_well_with_others") Nothing Nothing Nothing (Just $ last $ decodePathSegments $ US.fromString url)
+    , comicFileName = \_ url -> ComicTag (T.pack "does_not_play_well_with_others") Nothing Nothing Nothing (Just $ last $ decodePathSegments $ US.fromString url)
     }
 
 
@@ -259,51 +257,14 @@ buildUrlAndComicTagMapping root (x@(_, (level, name)):xs)
         notSameLevel targetLevel (_, (level, _)) = targetLevel /= level
 
 levelToComicTagMapping :: ComicTag -> (Url, (String, String)) -> (Url, ComicTag)
-levelToComicTagMapping parent (url, ("level-3", name)) = (url, parent {ctChapter = Just $ UnitTag 0 $ Just $ T.pack name})
-levelToComicTagMapping parent (url, ("level-2", name)) = (url, parent {ctVolume = Just $ UnitTag 0 $ Just $ T.pack name})
+levelToComicTagMapping parent (url, ("level-3", name)) =
+    let (chp, chpName) = fixChp name
+    in (url, parent {ctChapter = Just $ UnitTag chp chpName})
+levelToComicTagMapping parent (url, ("level-2", name)) =
+    let (vol, volName) = fixVol name
+    in (url, parent {ctVolume = Just $ UnitTag vol volName})
 levelToComicTagMapping parent (url, ("level-1", name)) = (url, parent {ctStoryName = Just $ T.pack name})
-
---buildUrlAndComicTagMapping root all@((_, (level, name)):xs)
---     | level == "level-3" = map (chapterMapping root) all
---     | otherwise          =
---         let ours = DL.takeWhile (\a -> (fst $ snd a) /= level) xs
---             rest = filter (not . flip elem ours) xs
---         in buildUrlAndComicTagMapping (root </> (FPO.decodeString name)) ours ++ buildUrlAndComicTagMapping (root) rest
---     where
---         chapterMapping root (url, (_, name)) = (url, root </> (FPO.decodeString name))
-
--- data ComicTag = ComicTag
---     { ctSiteName :: String
---     , ctStoryName :: Maybe String
---
---     , ctVolume :: Maybe UnitTag
---     , ctChapter :: Maybe UnitTag
---     , ctFileName :: Maybe String
---     }
---
--- data UnitTag = UnitTag
---     { utNumber :: Integer
---     , utTitle :: Maybe String
---     }
---
-
-testTag = ComicTag {ctSiteName = T.pack "errant_story", ctStoryName = Nothing, ctVolume = Nothing, ctChapter = Nothing, ctFileName = Nothing}
-testUrl =  [
-    ("http://www.errantstory.com/?cat=129",("level-1","Errant Story")),
-        ("http://www.errantstory.com/?cat=59",("level-2","Volume 1")),
-            ("http://www.errantstory.com/?cat=25",("level-3","Chapter 00 (Prologue)")),
-            ("http://www.errantstory.com/?cat=24",("level-3","Chapter 01")),
-        ("http://www.errantstory.com/?cat=59",("level-2","Volume 2")),
-            ("http://www.errantstory.com/?cat=25",("level-3","Chapter 02")),
-            ("http://www.errantstory.com/?cat=24",("level-3","Chapter 03")),
-    ("http://www.errantstory.com/?cat=129",("level-1","Errant Story CT")),
-        ("http://www.errantstory.com/?cat=59",("level-2","Volume 1")),
-            ("http://www.errantstory.com/?cat=25",("level-3","Chapter 00 (Prologue)")),
-            ("http://www.errantstory.com/?cat=24",("level-3","Chapter 01")),
-        ("http://www.errantstory.com/?cat=59",("level-2","Volume 2")),
-            ("http://www.errantstory.com/?cat=25",("level-3","Chapter 02")),
-            ("http://www.errantstory.com/?cat=24",("level-3","Chapter 03"))
-    ]
+levelToComicTagMapping parent content = throw $ DebugException "levelToComicTagMapping" ("Parent: " ++ show parent ++ " - Content: " ++ show content)
 
 
 
@@ -356,7 +317,7 @@ gunnerkrigCourt = Comic
     , comicTagFileName = undefined
     , comicFileName = \filepath url ->
         let (chp, name) = fixChp filepath
-        in ComicTag (T.pack "gunnerkrigg_court") Nothing Nothing (Just $ UnitTag chp $ Just $ T.pack name) (Just $ last $ decodePathSegments $ US.fromString url)
+        in ComicTag (T.pack "gunnerkrigg_court") Nothing Nothing (Just $ UnitTag chp name) (Just $ last $ decodePathSegments $ US.fromString url)
     }
 
 linkComic :: String -> String
@@ -368,11 +329,13 @@ tupleComic :: [String] -> Maybe (String, [String])
 tupleComic [] = Nothing
 tupleComic (x:xs) = Just (x, xs)
 
-fixChp :: String -> (Integer, String)
+
+
+fixChp :: String -> (Integer, Maybe T.Text)
 fixChp = extract . cleanChapter
 
-extract :: String -> (Integer, String)
-extract ('C':'h':'a':'p':'t':'e':'r':' ':a:b:':':' ':xs) = (read $ [a, b], xs)
+extract :: String -> (Integer, Maybe T.Text)
+extract ('C':'h':'a':'p':'t':'e':'r':' ':a:b:xs) = (read $ [a, b], (let txs = T.strip $ T.dropWhile (== ':') $ T.pack xs in if T.null txs then Nothing else Just txs))
 
 -- TODO: this is terribad but it'll let us have consistent chp/vol stuff
 -- for cheap extracting
@@ -389,6 +352,30 @@ cleanChapter ('C':'h':'a':'p':'t':'e':'r':' ':x:'8':xs) = "Chapter " ++ [x] ++ "
 cleanChapter ('C':'h':'a':'p':'t':'e':'r':' ':x:'9':xs) = "Chapter " ++ [x] ++ "9" ++ xs
 cleanChapter ('C':'h':'a':'p':'t':'e':'r':' ':xs) = "Chapter 0" ++ xs
 cleanChapter xs = xs
+
+
+
+fixVol :: String -> (Integer, Maybe T.Text)
+fixVol = extractV . cleanVolume
+
+extractV :: String -> (Integer, Maybe T.Text)
+extractV ('V':'o':'l':'u':'m':'e':' ':a:b:xs) = (read $ [a, b], (let txs = T.strip $ T.dropWhile (== ':') $ T.pack xs in if T.null txs then Nothing else Just txs))
+
+-- TODO: this is terribad but it'll let us have consistent chp/vol stuff
+-- for cheap extracting
+cleanVolume :: String -> String
+cleanVolume ('V':'o':'l':'u':'m':'e':' ':x:'0':xs) = "Volume " ++ [x] ++ "0" ++ xs
+cleanVolume ('V':'o':'l':'u':'m':'e':' ':x:'1':xs) = "Volume " ++ [x] ++ "1" ++ xs
+cleanVolume ('V':'o':'l':'u':'m':'e':' ':x:'2':xs) = "Volume " ++ [x] ++ "2" ++ xs
+cleanVolume ('V':'o':'l':'u':'m':'e':' ':x:'3':xs) = "Volume " ++ [x] ++ "3" ++ xs
+cleanVolume ('V':'o':'l':'u':'m':'e':' ':x:'4':xs) = "Volume " ++ [x] ++ "4" ++ xs
+cleanVolume ('V':'o':'l':'u':'m':'e':' ':x:'5':xs) = "Volume " ++ [x] ++ "5" ++ xs
+cleanVolume ('V':'o':'l':'u':'m':'e':' ':x:'6':xs) = "Volume " ++ [x] ++ "6" ++ xs
+cleanVolume ('V':'o':'l':'u':'m':'e':' ':x:'7':xs) = "Volume " ++ [x] ++ "7" ++ xs
+cleanVolume ('V':'o':'l':'u':'m':'e':' ':x:'8':xs) = "Volume " ++ [x] ++ "8" ++ xs
+cleanVolume ('V':'o':'l':'u':'m':'e':' ':x:'9':xs) = "Volume " ++ [x] ++ "9" ++ xs
+cleanVolume ('V':'o':'l':'u':'m':'e':' ':xs) = "Volume 0" ++ xs
+cleanVolume xs = xs
 
 
 
@@ -422,11 +409,11 @@ batoto = Comic
 --  - Defined stop point, Errant Story
 --  - Some command line arg for picking which comic to run
 main = do
---    let target = exploitationNow
 --    let target = doesNotPlayWellWithOthers
-    let target = errantStory
+--    let target = exploitationNow
 --    let target = girlGenius
 --    let target = gunnerkrigCourt
+    let target = errantStory
 --    let target = batoto
 
     -- Queues for processing stuff

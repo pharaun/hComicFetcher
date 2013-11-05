@@ -1,4 +1,4 @@
-{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE Rank2Types, DeriveDataTypeable #-}
 module Types
     ( Url(..)
     , FetchType(..)
@@ -7,14 +7,20 @@ module Types
 
     , ComicTag(..)
     , UnitTag(..)
+    , UnitTagType(..)
 
     , Comic(..)
+
+    , DebugException(..)
     ) where
 
 import Text.XML.HXT.Core
 import qualified Data.ByteString.Lazy.UTF8 as UL
 import qualified Filesystem.Path.CurrentOS as FPO
 import qualified Data.Text as T
+
+import Control.Exception
+import Data.Typeable
 
 -- Data type of the url and any additional info needed
 type Url = String
@@ -67,7 +73,7 @@ data ComicTag = ComicTag
     , ctVolume :: Maybe UnitTag
     , ctChapter :: Maybe UnitTag
 
-    , ctFileName :: Maybe T.Text
+    , ctFileName :: Maybe T.Text -- TODO: need to find a way to make this mandatory...
 --  TODO: Implement this, for now we just use file name
 --    , ctPage :: Maybe UnitTag
     }
@@ -78,6 +84,10 @@ data UnitTag = UnitTag
     , utTitle :: Maybe T.Text
     }
     deriving (Show)
+
+data UnitTagType = UnitTagVolume | UnitTagChapter
+
+
 
 -- Additional information tags to tag on a webpage Request
 data Tag = Serial -- Page by page fetching
@@ -148,4 +158,37 @@ data Comic = Comic
     , comicFileName :: String -> String -> ComicTag
     , comicTagFileName :: ComicTag -> String -> ComicTag
     }
+
+
+
+
+
+-- Debugging exceptions - Where, what
+data DebugException = DebugException String String
+    deriving (Show, Typeable)
+
+instance Exception DebugException
+
+
+
+-- Test data
+
+testTag = ComicTag {ctSiteName = T.pack "errant_story", ctStoryName = Nothing, ctVolume = Nothing, ctChapter = Nothing, ctFileName = Nothing}
+testUrl =  [
+    ("http://www.errantstory.com/?cat=129",("level-1","Errant Story")),
+        ("http://www.errantstory.com/?cat=59",("level-2","Volume 1")),
+            ("http://www.errantstory.com/?cat=25",("level-3","Chapter 00 (Prologue)")),
+            ("http://www.errantstory.com/?cat=24",("level-3","Chapter 01")),
+        ("http://www.errantstory.com/?cat=59",("level-2","Volume 2")),
+            ("http://www.errantstory.com/?cat=25",("level-3","Chapter 02")),
+            ("http://www.errantstory.com/?cat=24",("level-3","Chapter 03")),
+    ("http://www.errantstory.com/?cat=129",("level-1","Errant Story CT")),
+        ("http://www.errantstory.com/?cat=59",("level-2","Volume 1")),
+            ("http://www.errantstory.com/?cat=25",("level-3","Chapter 00 (Prologue)")),
+            ("http://www.errantstory.com/?cat=24",("level-3","Chapter 01")),
+        ("http://www.errantstory.com/?cat=59",("level-2","Volume 2")),
+            ("http://www.errantstory.com/?cat=25",("level-3","Chapter 02")),
+            ("http://www.errantstory.com/?cat=24",("level-3","Chapter 03"))
+    ]
+
 
