@@ -279,29 +279,37 @@ errantStory = Comic
 
     , chapterPage = undefined
 
-
-    , comicTagFileName = undefined
---     \filepath url ->
---        let base = FPO.decodeString "./errant_story"
---            fp   = FPO.decodeString filepath
---            file = FPO.fromText $ last $ decodePathSegments $ US.fromString url
---        in base </> fp </> file
-
-
+    , comicTagFileName = \ct url -> ct{ctFileName = Just $ last $ decodePathSegments $ US.fromString url}
     , comicFileName = undefined
     }
 
-buildUrlAndComicTagMapping :: ComicTag -> [(Url, (String, String))] -> [(Url, ComicTag)]
 --buildUrlAndComicTagMapping :: FPO.FilePath -> [(Url, (String, String))] -> [(Url, FPO.FilePath)]
+buildUrlAndComicTagMapping :: ComicTag -> [(Url, (String, String))] -> [(Url, ComicTag)]
 buildUrlAndComicTagMapping _ [] = []
-buildUrlAndComicTagMapping root all@((_, (level, name)):xs)
-     | level == "level-3" = map (chapterMapping root) all
+buildUrlAndComicTagMapping root (x@(_, (level, name)):xs)
+     | level == "level-3" = map (levelToComicTagMapping root) (x:xs)
      | otherwise          =
-         let ours = DL.takeWhile (\a -> (fst $ snd a) /= level) xs
-             rest = filter (not . flip elem ours) xs
-         in buildUrlAndComicTagMapping (root </> (FPO.decodeString name)) ours ++ buildUrlAndComicTagMapping (root) rest
-     where
-         chapterMapping root (url, (_, name)) = (url, root </> (FPO.decodeString name))
+         let ours = DL.takeWhile (notSameLevel level) xs
+             rest = DL.dropWhile (notSameLevel level) xs
+         in
+             buildUrlAndComicTagMapping (snd $ levelToComicTagMapping root x) ours ++ buildUrlAndComicTagMapping root rest
+    where
+        notSameLevel :: String -> (Url, (String, String)) -> Bool
+        notSameLevel targetLevel (_, (level, _)) = targetLevel /= level
+
+levelToComicTagMapping :: ComicTag -> (Url, (String, String)) -> (Url, ComicTag)
+levelToComicTagMapping parent (url, ("level-3", name)) = (url, parent {ctChapter = Just $ UnitTag 0 $ Just $ T.pack name})
+levelToComicTagMapping parent (url, ("level-2", name)) = (url, parent {ctVolume = Just $ UnitTag 0 $ Just $ T.pack name})
+levelToComicTagMapping parent (url, ("level-1", name)) = (url, parent {ctStoryName = Just $ T.pack name})
+
+--buildUrlAndComicTagMapping root all@((_, (level, name)):xs)
+--     | level == "level-3" = map (chapterMapping root) all
+--     | otherwise          =
+--         let ours = DL.takeWhile (\a -> (fst $ snd a) /= level) xs
+--             rest = filter (not . flip elem ours) xs
+--         in buildUrlAndComicTagMapping (root </> (FPO.decodeString name)) ours ++ buildUrlAndComicTagMapping (root) rest
+--     where
+--         chapterMapping root (url, (_, name)) = (url, root </> (FPO.decodeString name))
 
 -- data ComicTag = ComicTag
 --     { ctSiteName :: String
@@ -317,6 +325,25 @@ buildUrlAndComicTagMapping root all@((_, (level, name)):xs)
 --     , utTitle :: Maybe String
 --     }
 --
+
+testTag = ComicTag {ctSiteName = T.pack "errant_story", ctStoryName = Nothing, ctVolume = Nothing, ctChapter = Nothing, ctFileName = Nothing}
+testUrl =  [
+    ("http://www.errantstory.com/?cat=129",("level-1","Errant Story")),
+        ("http://www.errantstory.com/?cat=59",("level-2","Volume 1")),
+            ("http://www.errantstory.com/?cat=25",("level-3","Chapter 00 (Prologue)")),
+            ("http://www.errantstory.com/?cat=24",("level-3","Chapter 01")),
+        ("http://www.errantstory.com/?cat=59",("level-2","Volume 2")),
+            ("http://www.errantstory.com/?cat=25",("level-3","Chapter 02")),
+            ("http://www.errantstory.com/?cat=24",("level-3","Chapter 03")),
+    ("http://www.errantstory.com/?cat=129",("level-1","Errant Story CT")),
+        ("http://www.errantstory.com/?cat=59",("level-2","Volume 1")),
+            ("http://www.errantstory.com/?cat=25",("level-3","Chapter 00 (Prologue)")),
+            ("http://www.errantstory.com/?cat=24",("level-3","Chapter 01")),
+        ("http://www.errantstory.com/?cat=59",("level-2","Volume 2")),
+            ("http://www.errantstory.com/?cat=25",("level-3","Chapter 02")),
+            ("http://www.errantstory.com/?cat=24",("level-3","Chapter 03"))
+    ]
+
 
 
 
@@ -436,10 +463,10 @@ batoto = Comic
 main = do
 --    let target = exploitationNow
 --    let target = doesNotPlayWellWithOthers
---    let target = errantStory
+    let target = errantStory
 --    let target = girlGenius
 --    let target = gunnerkrigCourt
-    let target = batoto
+--    let target = batoto
 
     -- Queues for processing stuff
     -- TODO: look into tweaking this and making the indexed parser not deadlock the whole thing... if there's more to add to the queue than can be processed
