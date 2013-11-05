@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, Rank2Types #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-
     1. Basic structure
         a. Fetch a comic page
@@ -61,45 +61,6 @@ import qualified Filesystem.Path.CurrentOS as FPO
 -- Local imports
 import Types
 import Fetcher
-
-
-
-
--- Parameterized type
-data Foo a = Foo
-    { bar :: a
-    , baz :: a -> String
-    }
--- If no good there's - ExistentialQuantification
---
--- {-# LANGUAGE ExistentialQuantification #-}
--- data Foo = forall a . Foo { foo :: a, bar :: a -> String }
-
--- Records for all of the site to scrap from
-data Comic = Comic
-    { comicName :: String
-
-    -- Seed page/type for kickstarting the parser/fetcher
-    , seedPage :: String
-    , seedType :: Tag
-
-    , nextPage :: (ArrowXml a) => a XmlTree String
-    , comic :: (ArrowXml a) => a XmlTree String
-    -- Identify act (vol 1, 2) via body (class) - single-category-act-four ...
-    , whichVolChp :: (ArrowXml a) => a b XmlTree -> a b String
-
-    -- Indexing parser
-    , indexList :: (ArrowXml a) => a XmlTree (String, (String, String))
-    , chapterList :: (ArrowXml a) => a XmlTree (String, String)
-    , chapterNextPage :: (ArrowXml a) => a XmlTree String
-
-    , chapterPage :: (ArrowXml a) => a b XmlTree -> a b (String, [String])
-
-    -- TODO: first step is cleaning up the ComicTag Generation for
-    -- outputting, then we can look into fixing up the Tags
-    , comicFileName :: String -> String -> ComicTag
-    , comicTagFileName :: ComicTag -> String -> ComicTag
-    }
 
 
 --
