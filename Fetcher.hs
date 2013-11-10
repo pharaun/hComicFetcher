@@ -102,7 +102,7 @@ comicTagToFilePath ct = DL.foldl (</>) (FPO.decodeString "./") (DL.filter (not .
 
 
 -- TODO: restart if the exception kills -- main.hs: InvalidUrlException "/ggmain/doublespreads/extrabits/Gil.jpg" "Invalid URL"
-fetch :: TBMChan FetchType -> TBMChan ReplyType -> IO ()
+fetch :: TBMChan (FetchType a) -> TBMChan (ReplyType a) -> IO ()
 fetch i o = withSocketsDo $ E.bracket
     (CH.newManager CH.def)
     CH.closeManager
@@ -118,7 +118,7 @@ conduitFetcher :: (
     MonadBaseControl IO m,
     MonadResource m,
     Failure HttpException m
-    ) => Manager -> TBMChan FetchType -> TBMChan ReplyType -> m ()
+    ) => Manager -> TBMChan (FetchType a) -> TBMChan (ReplyType a) -> m ()
 conduitFetcher m i o = CT.sourceTBMChan i $= CL.mapMaybeM (fetcher m) $$ CT.sinkTBMChan o
 
 
@@ -126,7 +126,7 @@ conduitFetcherList :: (
     MonadBaseControl IO m,
     MonadResource m,
     Failure HttpException m
-    ) => Manager -> [FetchType] -> m [ReplyType]
+    ) => Manager -> [FetchType a] -> m [ReplyType a]
 conduitFetcherList m i = CL.sourceList i $= CL.mapMaybeM (fetcher m) $$ CL.consume
 
 
@@ -134,7 +134,7 @@ fetcher :: (
     MonadBaseControl IO m,
     MonadResource m,
     Failure HttpException m
-    ) => Manager -> FetchType -> m (Maybe ReplyType)
+    ) => Manager -> FetchType a -> m (Maybe (ReplyType a))
 fetcher m (Webpage u t) = do
     reply <- fetchSource m u
     return $ Just (WebpageReply reply t)

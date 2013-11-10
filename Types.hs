@@ -3,7 +3,6 @@ module Types
     ( Url(..)
     , FetchType(..)
     , ReplyType(..)
-    , Tag(..)
 
     , ComicTag(..)
     , UnitTag(..)
@@ -82,20 +81,10 @@ data UnitTagType = UnitTagVolume | UnitTagChapter
 -- Data type of the url and any additional info needed
 type Url = String
 
-data ReplyType = WebpageReply UL.ByteString Tag
+data ReplyType a = WebpageReply UL.ByteString a
 
-data FetchType = Webpage Url Tag
-               | Image Url ComicTag -- TODO: this is probably wrong type - We probably want FPO.FilePath
-
-
-
--- Additional information tags to tag on a webpage Request
-data Tag = Serial -- Page by page fetching
-         | VolChpIndex -- Volume Chp Index page
-         | VolIndex -- Volume Index page
-         | ChpIndex -- Chp Index page
-         | Chapter ComicTag -- Entire chapters page
-         | Page ComicTag -- single comic page
+data FetchType a = Webpage Url a
+                 | Image Url ComicTag -- TODO: this is probably wrong type - We probably want FPO.FilePath
 
 
 
@@ -120,74 +109,21 @@ data Tag = Serial -- Page by page fetching
 --  - Pick first page/chp/vol and load that to get drop down list, submit
 --      one chp fetcher per line in that list
 
-
-
--- Records for all of the site to scrap from
-data Comic = Comic
+-- Parameterized type
+data Comic t = Comic
     { comicName :: String
 
     -- Seed page/type for kickstarting the parser/fetcher
     , seedPage :: String
 --    , seedComicTag :: ComicTag
-    , seedType :: Tag
+    , seedType :: t -- TAG
 
     -- Page parser, Parse a page and return a list of stuff to fetch,
-    -- probably a comic page, website, etc... This would be the simplest,
-    -- May need to figure out how to do parameterized type for more
-    -- complicated parsing
---    , pageParser :: ReplyType -> [FetchType]
+    , pageParse :: ReplyType t -> IO [FetchType t]
 
     -- TODO: need some good way of convoying/tracking state for things such
     -- as page numbering (page1, page2, page3...)
-
-
-    -- The pageParser solution is probably the most flexible, would
-    -- probably need to make the FetchType/ReplyType parameterized and
-    -- more powerful type...
-
-
-
-
-
-
-
-
-    -- Possible more generic types (This only works if there is a dedicated
-    -- page to parse the comic image out of) - Don't need this probably
---    , comicImage :: ReplyType -> [ComicTag]
-
-
-
-    -- These types are way too specific, they spells out the implementation
-    -- details and the parser details, seems better to make the types more
-    -- generic.
-
-    -- Comic Image from single pages (For those kind of comic?)
-    , comic :: (ArrowXml a) => a XmlTree String
-
-    , nextPage :: (ArrowXml a) => a XmlTree String
-    -- Identify act (vol 1, 2) via body (class) - single-category-act-four ...
-    , whichVolChp :: (ArrowXml a) => a b XmlTree -> a b String
-
-    -- Indexing parser
-    , indexList :: (ArrowXml a) => a XmlTree (String, (String, String))
-    , chapterList :: (ArrowXml a) => a XmlTree (String, String)
-    , chapterNextPage :: (ArrowXml a) => a XmlTree String
-
-    , chapterPage :: (ArrowXml a) => a b XmlTree -> a b (String, [String])
-
-    -- TODO: first step is cleaning up the ComicTag Generation for
-    -- outputting, then we can look into fixing up the Tags
-    , comicFileName :: String -> String -> ComicTag
-    , comicTagFileName :: ComicTag -> String -> ComicTag
     }
-
-
-
-
-
-
-
 
 
 -- Debugging exceptions - Where, what
@@ -217,58 +153,3 @@ testUrl =  [
             ("http://www.errantstory.com/?cat=25",("level-3","Chapter 02")),
             ("http://www.errantstory.com/?cat=24",("level-3","Chapter 03"))
     ]
-
-
-
--- If no good there's - ExistentialQuantification
---
--- {-# LANGUAGE ExistentialQuantification #-}
--- data Foo = forall a . Foo { foo :: a, bar :: a -> String }
-
--- SOME TEST TYPE SYSTEM THEORY
-data TestComicTag = TestComicTag String
-
-data TestReplyType a = TWebpage UL.ByteString a
-
-data TestFetchType a = FWebpage Url a
-                     | FImage Url a
-
--- Parameterized type
-data TestComic a = TestComic
-    { name :: String
-
-    , seed :: String
-    , seedTypes :: a
-
-    , testPageParse :: TestReplyType a -> [TestFetchType a]
-    }
-
-
--- Test Implementation
-data TestTag = TTSerial | TTParallel
-
-foo = TestComic
-    { name = "wat"
-    , seed = "foo"
-
-    , seedTypes = TTSerial
-
-    , testPageParse = \_ -> [FWebpage "hi" TTSerial, FImage "bye" TTParallel]
-    }
-
-bar = TestComic
-    { name = "hoo"
-    , seed = "no"
-
-    , seedTypes = "Hi"
-    , testPageParse = \_ -> [FWebpage "hi" "bye"]
-    }
-
-
----- Additional information tags to tag on a webpage Request
---data Tag = Serial -- Page by page fetching
---         | VolChpIndex -- Volume Chp Index page
---         | VolIndex -- Volume Index page
---         | ChpIndex -- Chp Index page
---         | Chapter ComicTag -- Entire chapters page
---         | Page ComicTag -- single comic page
