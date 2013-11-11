@@ -1,5 +1,5 @@
 module Sites.Batoto
-    (
+    ( batoto
     ) where
 
 import Network.HTTP.Types.URI (decodePathSegments)
@@ -20,25 +20,51 @@ import qualified Data.ByteString.UTF8 as US
 import Types
 import Sites.Util
 
-----
----- Batoto
-----
---batoto = Comic
---    { comicName = "Batoto"
---    , seedPage = "http://www.batoto.net/comic/_/comics/yotsubato-r311"
---    , seedType = VolChpIndex
+-- Tagsoup
+import Text.XML.HXT.TagSoup
+
+
+data Tag = Index              -- Volume/Chapter Index page
+         | FirstPage ComicTag -- First page (fetch the list of pages)
+         | Page ComicTag      -- Each single page to be fetched
+
 --
---    , nextPage = undefined
+-- Batoto
 --
---    , comic = undefined
---
---    , whichVolChp = undefined
---    , indexList = undefined
---    , chapterList = undefined
---    , chapterNextPage = undefined
---    , chapterPage = undefined
---
---    , comicTagFileName = undefined
---    , comicFileName = \_ url ->
---        ComicTag (T.pack "batoto") (Just $ T.pack "yotsubato") Nothing Nothing Nothing
---    }
+batoto = Comic
+    { comicName = "Batoto"
+    , seedPage = error "Please specify a Batoto comic."
+    , seedType = Index
+
+    , pageParse = batotoPageParse
+    }
+
+batotoPageParse :: ReplyType Tag -> IO [FetchType Tag]
+batotoPageParse (WebpageReply html Index) = do
+    let doc = readString [withParseHTML yes, withWarnings no, withTagSoup] $ UL.toString html
+    story <- runX $ doc //> storyName
+
+    -- Do we have any comic we want to store to disk?
+    putStrLn "Story"
+    mapM_ print story
+
+
+    return []
+--    return $ map (\a -> Webpage a undefined) next ++ map (\a -> Image a $ comicFileName vol a) img
+
+   where
+    storyName = hasName "h1" >>> hasAttrValue "class" ((==) "ipsType_pagetitle")
+
+--    indexList =
+--        hasName "select"
+--        >>> hasAttrValue "id" (isInfixOf "cat")
+--        >>> getChildren
+--        >>> hasName "option"
+--        >>> hasAttrValue "class" (/= "level-0") -- Filter first level
+--        >>> hasAttrValue "value" (/= "131") -- History
+--        >>> hasAttrValue "value" (/= "9") -- Commentary
+--        >>> hasAttrValue "value" (/= "137") -- Guest Comics
+
+
+batotoPageParse (WebpageReply html (FirstPage ct)) = undefined
+batotoPageParse (WebpageReply html (Page ct)) = undefined

@@ -1,0 +1,38 @@
+name:                hComicFetcher
+version:             0.1.0.0
+synopsis:            Library and application for downloading webcomic and archive them into cbz.
+description:         Library and application for downloading webcomic into cbz so they can be enjoyed on the kindle/ipad.
+license:             GPL-3
+license-file:        LICENSE
+author:              Anja Berens
+maintainer:          pharaun666@gmail.com
+category:            System
+build-type:          Simple
+cabal-version:       >=1.8
+
+executable hComicFetcher
+--  Hs-source-dirs: src
+  main-is: main.hs
+
+  build-depends:
+    base ==4.6.*,
+    bytestring,
+    conduit,
+    cryptohash,
+    failure,
+    filesystem-conduit,
+    http-conduit,
+    http-types,
+    hxt,
+    hxt-tagsoup,
+    network,
+    split,
+    stm,
+    stm-chans,
+    stm-conduit,
+    system-fileio,
+    system-filepath,
+    text,
+    time,
+    transformers,
+    utf8-string

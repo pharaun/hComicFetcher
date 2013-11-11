@@ -71,8 +71,8 @@ main = do
 --    processTarget exploitationNow
 --    processTarget girlGenius
 --    processTarget gunnerkrigCourt
-    processTarget errantStory
---    processTarget batoto
+--    processTarget errantStory
+    processTarget $ batoto {seedPage = "http://www.batoto.net/comic/_/comics/yotsubato-r311"}
 
   where
     -- TODO: Redo this so that it can accept multiple calls for each target

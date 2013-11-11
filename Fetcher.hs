@@ -41,6 +41,9 @@ import Data.Maybe
 import qualified Data.List as DL
 import qualified Data.Text as T
 
+import Data.Time.Clock
+import Data.Time.Calendar
+
 
 -- Local types
 import Types
@@ -50,6 +53,34 @@ import Types
 -- Seconds to wait between each request to this site
 fetchWaitTime :: Int
 fetchWaitTime = 1
+
+--
+-- Custom cookie jar for Batoto to only display english
+--
+-- TODO: Create a way for us to have per site rules for (auth/cookies/etc)
+past :: UTCTime
+past = UTCTime (ModifiedJulianDay 56000) (secondsToDiffTime 0) -- 2012-03-14
+
+future :: UTCTime
+future = UTCTime (ModifiedJulianDay 60000) (secondsToDiffTime 0) -- 2023-02-25
+
+batotoCookie :: CH.Cookie
+batotoCookie = CH.Cookie
+    { CH.cookie_name   = US.fromString "lang_option"
+    , CH.cookie_value  = US.fromString "English"
+    , CH.cookie_domain = US.fromString ".batoto.net"
+    , CH.cookie_path   = US.fromString "/"
+
+    , CH.cookie_expiry_time = future
+    , CH.cookie_creation_time = past
+    , CH.cookie_last_access_time = past
+
+    , CH.cookie_persistent = True
+    , CH.cookie_host_only = False
+    , CH.cookie_secure_only = False
+    , CH.cookie_http_only = False
+    }
+
 
 
 
@@ -92,9 +123,6 @@ comicTagToFilePath ct = DL.foldl (</>) (FPO.decodeString "./") (DL.filter (not .
                 Nothing -> T.empty
                 Just x  -> T.pack ": " `T.append` x
             ))
-
-
-
 
 
 
@@ -178,7 +206,11 @@ fetchStream :: (
     ) => Manager -> String -> m (C.ResumableSource m S.ByteString)
 fetchStream m url = do
     req' <- CH.parseUrl url
-    let req = req' { CH.checkStatus = \_ _ _ -> Nothing }
+
+    -- TODO: remove the batoto special case
+    let req =   if "batoto" `DL.isInfixOf` url
+                then req' { CH.checkStatus = \_ _ _ -> Nothing, CH.cookieJar = Just $ CH.createCookieJar [batotoCookie] }
+                else req' { CH.checkStatus = \_ _ _ -> Nothing }
 
     -- Caching hook here
     --  1. Check for cache value
