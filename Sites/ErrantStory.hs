@@ -156,3 +156,23 @@ errantStoryPageParse (WebpageReply html (Page ct)) = do
    where
     comic = hasAttrValue "id" (== "comic") >>> hasName "div" //> hasName "img" >>> hasAttr "src" >>> getAttrValue "src"
     comicTagFileName ct url = ct{ctFileName = Just $ last $ decodePathSegments $ US.fromString url}
+
+
+-- Test data
+testTag = ComicTag {ctSiteName = T.pack "errant_story", ctStoryName = Nothing, ctVolume = Nothing, ctChapter = Nothing, ctFileName = Nothing}
+testUrl =  [
+    ("http://www.errantstory.com/?cat=129",("level-1","Errant Story")),
+        ("http://www.errantstory.com/?cat=59",("level-2","Volume 1")),
+            ("http://www.errantstory.com/?cat=25",("level-3","Chapter 00 (Prologue)")),
+            ("http://www.errantstory.com/?cat=24",("level-3","Chapter 01")),
+        ("http://www.errantstory.com/?cat=59",("level-2","Volume 2")),
+            ("http://www.errantstory.com/?cat=25",("level-3","Chapter 02")),
+            ("http://www.errantstory.com/?cat=24",("level-3","Chapter 03")),
+    ("http://www.errantstory.com/?cat=129",("level-1","Errant Story CT")),
+        ("http://www.errantstory.com/?cat=59",("level-2","Volume 1")),
+            ("http://www.errantstory.com/?cat=25",("level-3","Chapter 00 (Prologue)")),
+            ("http://www.errantstory.com/?cat=24",("level-3","Chapter 01")),
+        ("http://www.errantstory.com/?cat=59",("level-2","Volume 2")),
+            ("http://www.errantstory.com/?cat=25",("level-3","Chapter 02")),
+            ("http://www.errantstory.com/?cat=24",("level-3","Chapter 03"))
+    ]

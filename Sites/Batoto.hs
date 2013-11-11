@@ -43,28 +43,56 @@ batotoPageParse :: ReplyType Tag -> IO [FetchType Tag]
 batotoPageParse (WebpageReply html Index) = do
     let doc = readString [withParseHTML yes, withWarnings no, withTagSoup] $ UL.toString html
     story <- runX $ doc //> storyName
+    volChpPage <- runX $ doc //> volChpPage
 
     -- Do we have any comic we want to store to disk?
     putStrLn "Story"
     mapM_ print story
 
+    putStrLn "Vol Chp Pages"
+    mapM_ print volChpPage
 
     return []
 --    return $ map (\a -> Webpage a undefined) next ++ map (\a -> Image a $ comicFileName vol a) img
 
    where
-    storyName = hasName "h1" >>> hasAttrValue "class" ((==) "ipsType_pagetitle")
+    storyName = hasName "h1" >>> hasAttrValue "class" ((==) "ipsType_pagetitle") /> getText >>> arr textStrip
 
---    indexList =
---        hasName "select"
---        >>> hasAttrValue "id" (isInfixOf "cat")
---        >>> getChildren
---        >>> hasName "option"
---        >>> hasAttrValue "class" (/= "level-0") -- Filter first level
---        >>> hasAttrValue "value" (/= "131") -- History
---        >>> hasAttrValue "value" (/= "9") -- Commentary
---        >>> hasAttrValue "value" (/= "137") -- Guest Comics
+    volChpPage =
+        hasName "table"
+        >>> hasAttrValue "class" (isInfixOf "chapters_list")
+        //> hasName "tr"
+        >>> hasAttrValue "class" (isInfixOf "lang_English")
+        //> (hasName "a" `containing` (getChildren >>> hasName "img"))
+        >>> (
+                (getAttrValue "href")
+                &&&
+                (getChildren >>> getText >>> arr textStrip)
+            )
+
+    textStrip :: String -> String
+    textStrip = T.unpack . T.strip . T.pack
+
+batotoPageParse (WebpageReply html (FirstPage ct)) = do
+    let doc = readString [withParseHTML yes, withWarnings no, withTagSoup] $ UL.toString html
+    img <- runX $ doc //> comic
+    otherPages <- runX $ doc //> otherPages
+
+    -- Do we have any comic we want to store to disk?
+    putStrLn "img url"
+    mapM_ print img
+
+    putStrLn "Next pages"
+    mapM_ print otherPages
+
+    return []
+--    return $ map (\a -> Webpage a undefined) next ++ map (\a -> Image a $ comicFileName vol a) img
+
+   where
+    otherPages = hasName "h1"
 
 
-batotoPageParse (WebpageReply html (FirstPage ct)) = undefined
 batotoPageParse (WebpageReply html (Page ct)) = undefined
+
+
+comic = hasName "img"

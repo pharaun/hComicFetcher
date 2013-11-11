@@ -92,10 +92,14 @@ data FetchType a = Webpage Url a
 -- to then parse it out of the dropdown.
 --
 -- Format:
--- Vol 12 Ch 079: Name &amp; V
+-- Vol 12 Ch 079: Name V
 -- Vol TBD Ch 353: Foobar stuff
 -- Ch 087: weird
 -- Ch 000
+-- Ch 032.5
+-- Ch 087v2: foobar
+-- Ch.23: foo
+-- Vol.43 Ch.3234: Barz
 --
 -- Need to special case the case in which its Licensed and thus not
 -- available for downloading
@@ -131,25 +135,3 @@ data DebugException = DebugException String String
     deriving (Show, Typeable)
 
 instance Exception DebugException
-
-
-
--- Test data
-
-testTag = ComicTag {ctSiteName = T.pack "errant_story", ctStoryName = Nothing, ctVolume = Nothing, ctChapter = Nothing, ctFileName = Nothing}
-testUrl =  [
-    ("http://www.errantstory.com/?cat=129",("level-1","Errant Story")),
-        ("http://www.errantstory.com/?cat=59",("level-2","Volume 1")),
-            ("http://www.errantstory.com/?cat=25",("level-3","Chapter 00 (Prologue)")),
-            ("http://www.errantstory.com/?cat=24",("level-3","Chapter 01")),
-        ("http://www.errantstory.com/?cat=59",("level-2","Volume 2")),
-            ("http://www.errantstory.com/?cat=25",("level-3","Chapter 02")),
-            ("http://www.errantstory.com/?cat=24",("level-3","Chapter 03")),
-    ("http://www.errantstory.com/?cat=129",("level-1","Errant Story CT")),
-        ("http://www.errantstory.com/?cat=59",("level-2","Volume 1")),
-            ("http://www.errantstory.com/?cat=25",("level-3","Chapter 00 (Prologue)")),
-            ("http://www.errantstory.com/?cat=24",("level-3","Chapter 01")),
-        ("http://www.errantstory.com/?cat=59",("level-2","Volume 2")),
-            ("http://www.errantstory.com/?cat=25",("level-3","Chapter 02")),
-            ("http://www.errantstory.com/?cat=24",("level-3","Chapter 03"))
-    ]
