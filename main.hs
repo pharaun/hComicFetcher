@@ -127,6 +127,4 @@ indexedParser Comic{pageParse=parse} i o = do
 untilM_ :: (Monad m) => m a -> (a -> Bool) -> m ()
 untilM_ f p = do
     x <- f
-    if p x
-        then untilM_ f p
-        else return ()
+    CM.when (p x) $ untilM_ f p

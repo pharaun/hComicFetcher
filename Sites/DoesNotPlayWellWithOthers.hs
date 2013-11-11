@@ -49,7 +49,7 @@ dnpwwoPageParse (WebpageReply html _) = do
     mapM_ putStrLn img
     mapM_ putStrLn next
 
-    return $ (map (\a -> Webpage a undefined) next) ++ (map (\a -> Image a $ comicFileName a) img)
+    return $ map (\a -> Webpage a undefined) next ++ map (\a -> Image a $ comicFileName a) img
 
    where
     nextPage = hasName "a" >>> hasAttrValue "class" (isInfixOf "navi-next") >>> hasAttr "href" >>> getAttrValue "href"

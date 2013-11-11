@@ -115,7 +115,7 @@ errantStoryPageParse (WebpageReply html (Chapter ct)) = do
 
     -- TODO:
     --  1. Do something with the name of the page (Chapter 42: foobar) (not on all pages unfortunately)
-    return $ (map (\a -> Webpage a (Chapter ct)) next) ++ (map (\a -> Webpage (fst a) (Page ct)) chp)
+    return $ map (\a -> Webpage a (Chapter ct)) next ++ map (\a -> Webpage (fst a) (Page ct)) chp
 
    where
     chapterList =

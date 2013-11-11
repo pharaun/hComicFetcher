@@ -43,14 +43,14 @@ girlGeniusPageParse (WebpageReply html _) = do
     let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
     next <- runX $ doc //> nextPage
     img <- runX $ doc //> comic
-    vol <- concat `fmap` (runX $ (whichVol doc))
+    vol <- concat `fmap` runX (whichVol doc)
 
     -- Do we have any comic we want to store to disk?
     putStrLn "Fetched Urls:"
     mapM_ putStrLn img
     mapM_ putStrLn next
 
-    return $ (map (\a -> Webpage a undefined) next) ++ (map (\a -> Image a $ comicFileName vol a) img)
+    return $ map (\a -> Webpage a undefined) next ++ map (\a -> Image a $ comicFileName vol a) img
 
    where
     nextPage = hasName "td" >>> hasAttrValue "valign" (== "top") //> (hasName "a" </ (hasName "img" >>> hasAttrValue "alt" (== "The Next Comic"))) >>> getAttrValue "href"
@@ -76,8 +76,8 @@ girlGeniusPageParse (WebpageReply html _) = do
                 &&&
                 (getChildren >>> getText)
             )
-        >>. filter (\(a, b) -> a || ((("VOLUME" `isInfixOf` b) || ("Volume" `isInfixOf` b)) && (not (("Final Page" `isPrefixOf` b) || ("Wallpaper" `isInfixOf` b)))))
-        ) >. (fst . DL.break fst)
+        >>. filter (\(a, b) -> a || ((("VOLUME" `isInfixOf` b) || ("Volume" `isInfixOf` b)) && not (("Final Page" `isPrefixOf` b) || ("Wallpaper" `isInfixOf` b))))
+        ) >. takeWhile (not . fst)
         >>> unlistA
         >>> arr snd
         -- ) >>> arr ((SL.split . SL.keepDelimsL . SL.whenElt) (isPrefixOf "Chapter")) -- TODO: this is for splitting things up

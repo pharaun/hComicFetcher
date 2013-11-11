@@ -13,7 +13,7 @@ fixChp :: String -> (Integer, Maybe T.Text)
 fixChp = extract . cleanChapter
 
 extract :: String -> (Integer, Maybe T.Text)
-extract ('C':'h':'a':'p':'t':'e':'r':' ':a:b:xs) = (read $ [a, b], (let txs = T.strip $ T.dropWhile (== ':') $ T.pack xs in if T.null txs then Nothing else Just txs))
+extract ('C':'h':'a':'p':'t':'e':'r':' ':a:b:xs) = (read [a, b], let txs = T.strip $ T.dropWhile (== ':') $ T.pack xs in if T.null txs then Nothing else Just txs)
 
 -- TODO: this is terribad but it'll let us have consistent chp/vol stuff
 -- for cheap extracting
@@ -37,7 +37,7 @@ fixVol :: String -> (Integer, Maybe T.Text)
 fixVol = extractV . cleanVolume
 
 extractV :: String -> (Integer, Maybe T.Text)
-extractV ('V':'o':'l':'u':'m':'e':' ':a:b:xs) = (read $ [a, b], (let txs = T.strip $ T.dropWhile (== ':') $ T.pack xs in if T.null txs then Nothing else Just txs))
+extractV ('V':'o':'l':'u':'m':'e':' ':a:b:xs) = (read [a, b], let txs = T.strip $ T.dropWhile (== ':') $ T.pack xs in if T.null txs then Nothing else Just txs)
 
 -- TODO: this is terribad but it'll let us have consistent chp/vol stuff
 -- for cheap extracting
@@ -60,18 +60,18 @@ cleanVolume xs = xs
 -- Process a sequence of english number into an integer value
 -- If invalid/incomplete/what so not it will return a 0
 wordToNumber :: String -> Integer
-wordToNumber = DL.foldl' compute 0 . (map T.unpack) . T.words . T.toLower . T.pack
+wordToNumber = DL.foldl' compute 0 . map T.unpack . T.words . T.toLower . T.pack
     where
         compute :: Integer -> String -> Integer
         compute prior word =
             let v = DL.lookup word numberWordTable
             in case v of
-                (Just x) -> (x + prior)
-                Nothing  ->
+                Just x  -> x + prior
+                Nothing ->
                     let w = DL.lookup word multiplerWordTable
                     in case w of
-                        (Just y) -> (y * prior)
-                        Nothing  -> prior
+                        Just y  -> y * prior
+                        Nothing -> prior
 
 numberWordTable :: [(String, Integer)]
 numberWordTable =

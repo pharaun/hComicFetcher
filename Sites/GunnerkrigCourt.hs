@@ -82,7 +82,7 @@ gunnerkrigCourtPageParse (WebpageReply html _) = do
     linkComic :: String -> String
     linkComic u = "http://www.gunnerkrigg.com/comics/" ++ padNum u ++ ".jpg"
         where
-            padNum n = (DL.concat $ DL.take (8 - DL.length u) (DL.repeat "0")) ++ n
+            padNum n = DL.concat (replicate (8 - DL.length u) "0") ++ n
 
     tupleComic :: [String] -> Maybe (String, [String])
     tupleComic [] = Nothing

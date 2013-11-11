@@ -1,4 +1,4 @@
-﻿{-# LANGUAGE FlexibleContexts, Rank2Types #-}
+{-# LANGUAGE FlexibleContexts, Rank2Types #-}
 module Fetcher
     ( fetch
     ) where
@@ -62,17 +62,17 @@ comicTagToFilePath ct = DL.foldl (</>) (FPO.decodeString "./") (DL.filter (not .
     [ FPO.fromText (ctSiteName ct)
 
     -- Story Name
-    , case (ctStoryName ct) of
+    , case ctStoryName ct of
         Nothing -> FP.empty
         Just x  -> FPO.fromText x
 
     -- Volume
-    , case (ctVolume ct) of
+    , case ctVolume ct of
         Nothing -> FP.empty
         Just x  -> unitTagToFilePath UnitTagVolume x
 
     -- Chapter
-    , case (ctChapter ct) of
+    , case ctChapter ct of
         Nothing -> FP.empty
         Just x  -> unitTagToFilePath UnitTagChapter x
 
@@ -87,10 +87,10 @@ comicTagToFilePath ct = DL.foldl (</>) (FPO.decodeString "./") (DL.filter (not .
 
         -- TODO: need to add zero padding
         unitTagString :: T.Text -> UnitTag -> FPO.FilePath
-        unitTagString s UnitTag{utNumber=issue, utTitle=name} = FPO.fromText (s `T.append` (T.pack $ show issue) `T.append` (
+        unitTagString s UnitTag{utNumber=issue, utTitle=name} = FPO.fromText (s `T.append` T.pack (show issue) `T.append` (
             case name of
                 Nothing -> T.empty
-                Just x  -> (T.pack ": ") `T.append` x
+                Just x  -> T.pack ": " `T.append` x
             ))
 
 
@@ -141,7 +141,7 @@ fetcher m (Webpage u t) = do
 fetcher m (Image u f) = do
     -- Stream to disk
     fetchToDisk m u (comicTagToFilePath f)
-    return $ Nothing
+    return Nothing
 
 
 
@@ -201,7 +201,7 @@ cacheExists = isFile . cacheFile
 
 cacheSource :: MonadResource m => String -> m (C.ResumableSource m S.ByteString)
 cacheSource url = do
-    (a, b) <- (CF.sourceFile $ cacheFile url) $$+ CL.take 0
+    (a, b) <- CF.sourceFile (cacheFile url) $$+ CL.take 0
     return a
 
 cacheSink :: MonadResource m => String -> C.Sink S.ByteString m ()
@@ -214,4 +214,4 @@ cacheSink url = do
     CF.sinkFile fp
 
 cacheFile :: String -> FPO.FilePath
-cacheFile url = FPO.decodeString "./cache" </> (FPO.decode $ digestToHexByteString $ (hash $ US.fromString url :: Digest SHA512))
+cacheFile url = FPO.decodeString "./cache" </> FPO.decode (digestToHexByteString (hash $ US.fromString url :: Digest SHA512))
