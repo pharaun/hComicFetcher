@@ -97,9 +97,20 @@ data FetchType a = Webpage Url a
 -- Ch 087: weird
 -- Ch 000
 -- Ch 032.5
+-- Ch 032.1
 -- Ch 087v2: foobar
 -- Ch.23: foo
 -- Vol.43 Ch.3234: Barz
+-- Vol.32 Ch.123 Read Online
+-- Vol.4 Chp.Extra: Foobar
+-- Vol.4 Chp.Extra 2: Foobar
+-- Ch.0: [Oneshot]
+-- Ch.0: [Complete]
+-- Vol.1 Ch.3 Extra: bar
+-- Vol.03 Ch.13a
+-- Vol.03 Ch.13cd
+-- Vol.4 Chp.23-27: Foobar
+-- Vol.2 Chp.Fanbook Omake Read Online
 --
 -- Need to special case the case in which its Licensed and thus not
 -- available for downloading

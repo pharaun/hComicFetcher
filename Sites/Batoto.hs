@@ -52,8 +52,10 @@ batotoPageParse (WebpageReply html Index) = do
     putStrLn "Vol Chp Pages"
     mapM_ print volChpPage
 
-    return []
---    return $ map (\a -> Webpage a undefined) next ++ map (\a -> Image a $ comicFileName vol a) img
+    -- Parse the Vol/Chp
+    -- TODO: SafeHead
+    let next = map (\(a, b) -> (a, volChpParse "batoto" (head story) b)) volChpPage
+    return $ map (\(a, b) -> Webpage a (FirstPage b)) next
 
    where
     storyName = hasName "h1" >>> hasAttrValue "class" ((==) "ipsType_pagetitle") /> getText >>> arr textStrip
@@ -76,7 +78,7 @@ batotoPageParse (WebpageReply html Index) = do
 batotoPageParse (WebpageReply html (FirstPage ct)) = do
     let doc = readString [withParseHTML yes, withWarnings no, withTagSoup] $ UL.toString html
     img <- runX $ doc //> comic
-    otherPages <- runX $ doc //> otherPages
+    otherPages <- runX $ doc >>> otherPages
 
     -- Do we have any comic we want to store to disk?
     putStrLn "img url"
@@ -85,14 +87,30 @@ batotoPageParse (WebpageReply html (FirstPage ct)) = do
     putStrLn "Next pages"
     mapM_ print otherPages
 
-    return []
---    return $ map (\a -> Webpage a undefined) next ++ map (\a -> Image a $ comicFileName vol a) img
+    return $ map (\a -> Webpage a (Page ct)) otherPages ++ map (\a -> Image a $ comicTagFileName ct a) img
 
    where
-    otherPages = hasName "h1"
+    otherPages =
+        (getChildren
+        //> hasName "select"
+        >>> hasAttrValue "id" ((==) "page_select"))
 
+        -- Drop the rest
+        >. head
 
-batotoPageParse (WebpageReply html (Page ct)) = undefined
+        >>> getChildren
+        >>> hasName "option"
+        >>> ifA (hasAttr "selected") none (getAttrValue "value")
 
+batotoPageParse (WebpageReply html (Page ct)) = do
+    let doc = readString [withParseHTML yes, withWarnings no, withTagSoup] $ UL.toString html
+    img <- runX $ doc //> comic
 
-comic = hasName "img"
+    -- Do we have any comic we want to store to disk?
+    putStrLn "img url"
+    mapM_ print img
+
+    return $ map (\a -> Image a $ comicTagFileName ct a) img
+
+comic = hasName "img" >>> hasAttrValue "id" ((==) "comic_page") >>> getAttrValue "src"
+comicTagFileName ct url = ct{ctFileName = Just $ last $ decodePathSegments $ US.fromString url}

@@ -1,11 +1,19 @@
 module Sites.Util
-    ( fixChp
+    ( volChpParse
+    , fixChp
     , fixVol
     , wordToNumber
     ) where
 
 import qualified Data.List as DL
 import qualified Data.Text as T
+
+-- Local Imports
+import Types
+
+-- Site, Story, "Vol/Chp/etc" parse
+volChpParse :: String -> String -> String -> ComicTag
+volChpParse = undefined
 
 
 
