@@ -8,12 +8,149 @@ module Sites.Util
 import qualified Data.List as DL
 import qualified Data.Text as T
 
+-- Parsec
+import Text.Parsec
+import Text.Parsec.String (Parser)
+import Data.Functor.Identity (Identity)
+
+-- Testing
+import Test.HUnit
+
 -- Local Imports
 import Types
 
 -- Site, Story, "Vol/Chp/etc" parse
 volChpParse :: String -> String -> String -> ComicTag
 volChpParse = undefined
+
+volParse :: ParsecT String u Identity [String]
+volParse = do
+    label <- choice -- TODO: can probably make more efficient by building up from V,Vol,Volume
+        [ try $ string "Volume"
+        , try $ string "Vol"
+        , string "V"
+        ]
+
+    -- Eat a space/dot
+    skipMany $ oneOf " ."
+
+    -- Identifiers (tbd)
+    ident <- try $ string "TBD"
+
+    -- Version on vol
+
+    -- Subvol (x.5, Xa, X.foo)
+
+    -- Volume span/collections (2-3, 4,5,3)
+
+    rest <- many anyChar
+
+    return [label, ident, rest]
+
+
+numParse :: ParsecT String u Identity [String]
+numParse = do
+    v <- (many1 (choice [digit, char '-'])) `sepBy` (char ',')
+
+
+    rest <- many anyChar
+    return $ v ++ [rest]
+
+
+testNum = mapM_ (parseTest numParse)
+    [ "1"
+    , "01"
+    , "01v2"
+    , "01.3"
+    , "01.herp"
+    , "1,2,3"
+    , "1-3"
+    , "1,3-5"
+    , "1-3,5"
+    , "1a"
+    ]
+
+
+runTests :: IO ()
+runTests = do
+    putStrLn "volParse"
+    print =<< runTestTT (buildParseTests volParse volParseData)
+
+buildParseTests parser testData = TestList $ map (\(src, dst) -> TestLabel (src ++ " -> " ++ dst) (parserTest parser src dst)) testData
+parserTest parser src dst = TestCase (assertEqual "" (Just [dst]) (either (const Nothing) Just (parse parser "(stdin)" src)))
+
+volParseData :: [(String, String)]
+volParseData =
+    [ ("", "")
+    , ("Volume 02", "")
+    , ("Vol 12", "")
+    , ("Vol TBD", "")
+    , ("Vol.43", "")
+    , ("Vol.01", "")
+    , ("Vol.01v2", "")
+    , ("Vol.01.3", "")
+    , ("Vol.01.herp", "")
+    , ("V.01", "")
+    , ("V1", "")
+    , ("V 1", "")
+    , ("Vol 2-7", "")
+    , ("Vol 2,5,7", "")
+    , ("Vol 2-5,7", "")
+    , ("Vol 1,3-5,7", "")
+    , ("Vol 1,3-5,7-9", "")
+    , ("Vol 4a", "")
+    , ("Vol 4.3", "")
+    , ("Vol 4v2", "")
+    ]
+
+
+
+
+
+-- Format:
+-- Vol 12 Ch 079: Name V
+-- Vol TBD Ch 353: Foobar stuff
+-- Ch 087: weird
+-- Ch 000
+-- Ch 032.5
+-- Ch 032.1
+-- Ch 087v2: foobar
+-- Ch.23: foo
+-- Vol.43 Ch.3234: Barz
+-- Vol.32 Ch.123 Read Online
+-- Vol.4 Chp.Extra: Foobar
+-- Vol.4 Chp.Extra 2: Foobar
+-- Ch.0: [Oneshot]
+-- Ch.0: [Complete]
+-- Vol.1 Ch.3 Extra: bar
+-- Vol.03 Ch.13a
+-- Vol.03 Ch.13cd
+-- Vol.4 Chp.23-27: Foobar
+-- Vol.2 Chp.Fanbook Omake Read Online
+
+
+
+---- Filesystem format - SiteName/StoryName/Volume/Chapter/Page.*
+--data ComicTag = ComicTag
+--    { ctSiteName :: T.Text
+--    , ctStoryName :: Maybe T.Text
+--
+--    , ctVolume :: Maybe UnitTag
+--    , ctChapter :: Maybe UnitTag
+--
+--    , ctFileName :: Maybe T.Text -- TODO: need to find a way to make this mandatory...
+----    , ctPage :: Maybe UnitTag --  TODO: Implement this, for now we just use file name
+--    }
+--    deriving (Show)
+--
+--data UnitTag = UnitTag
+--    { utNumber :: Integer
+--    , utTitle :: Maybe T.Text
+--    }
+--    deriving (Show)
+--
+--data UnitTagType = UnitTagVolume | UnitTagChapter
+
 
 
 
