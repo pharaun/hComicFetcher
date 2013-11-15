@@ -63,12 +63,140 @@ testNum = mapM_ (parseTest numParse)
     , "01v2"
     , "01.3"
     , "01.herp"
+    , "01.herp derp"
+    , "01 herp derp"
     , "1,2,3"
     , "1-3"
     , "1,3-5"
     , "1-3,5"
     , "1a"
     ]
+
+
+
+-- First pass
+--  - Trim string
+--  - Remove " Read Online"
+--
+-- Second pass
+--  - Break up in 2 part vol/chp and optional title
+--  - Trim the optional title
+--  - Check if its one that should be discarded? ([Oneshot], [Complete]) ?
+--
+-- Third pass
+--  - Attempt to break up Vol/Chp?
+
+
+--
+-- Formal Grammar Definition for Vol/Chp segments
+--
+-- IFF - If and only If
+--
+-- {Vol}
+-- [ .]
+--
+-- ( {text} | {digits} )
+--
+--  {text} -> ( TBD | [A-z0-9 ]+ ){eos} - Basically anything except {eos}
+--
+--  {digits} -> ( {single_digit} | ( {single_digit},{digits} | {single_digit}-{single_digit} ( {eos} | ,{digits} ) ) )
+--      TODO: not sure if ^ is the best rule
+--      TODO: extend digits rules to include 1-2 and 1,2 approaches
+--      TODO: do not allow text (only allow version) in the multi-digit & spread-digit
+--
+--  {single_digit} -> [0-9]+ ( {version}?{sub_digit:[ ]}? | {sub_digit}? )
+--
+--      {sub_digit}
+--      [.] -> ( [0-9]+ | [A-z0-9 ]+{eos} ) - TODO: this means its probably the chapter label such as "Chp 09.Extra 2"
+--
+--      [ ] -> ( [A-z0-9 ]+{eol} ) - IFF there is no {next_section}
+--          (IE. if its "Chp 0 Foobar", "Foobar" is the title. Otherwise if "Chp 0 Foobar: Bar" the "Foobar" is a chapter label
+--
+--      {version}
+--      [v] -> v[0-9]+ - If and only if followed by [0-9]+ otherwise it is {text/label of some sort}
+--
+--  {eol} -> End of Line
+--
+--  {eos} -> ( maybe [ ] | : {title} | {Chp..} | {eol}
+--
+--  {next_section} -> ( : {title} | {Chp..} )
+--
+
+-- Format:
+-- Chp 00
+-- Chp TBD
+-- Chp.00
+-- Chp.TBD
+-- Chp 00: title
+-- Chp.00: title
+-- Chp.TBD: title
+--
+-- Chp 00.1
+-- Chp.00.1
+-- Chp 00.1: title
+-- Chp.00.1: title
+--
+-- Chp Extra
+-- Chp.Extra
+-- Chp Extra: title
+-- Chp.Extra: title
+--
+-- Chp Extra Content
+-- Chp.Extra Content
+-- Chp Extra Content: title
+-- Chp.Extra Content: title
+--
+-- Chp 00v2
+-- Chp.00v2
+-- Chp 00v2: title
+-- Chp.00v2: title
+--
+-- Chp 00.1v2
+-- Chp.00.1v2
+-- Chp 00.1v2: title
+-- Chp.00.1v2: title
+--
+-- Chp 00a
+-- Chp.00a
+-- Chp 00a: title
+-- Chp.00a: title
+--
+-- Chp 00va
+-- Chp.00va
+-- Chp 00va: title
+-- Chp.00va: title
+--
+-- Chp 00 foobar
+-- Chp.00 foobar
+-- Chp 00.foobar
+-- Chp.00.foobar
+-- Chp 00 foobar: title
+-- Chp.00 foobar: title
+-- Chp 00.foobar: title
+-- Chp.00.foobar: title
+--
+-- Chp 1,2
+-- Chp.1,2
+-- Chp 1,2: title
+-- Chp.1,2: title
+--
+-- Chp 1-2
+-- Chp.1-2
+-- Chp 1-2: title
+-- Chp.1-2: title
+--
+-- Chp 1-2,4
+-- Chp.1-2,4
+-- Chp 1-2,4: title
+-- Chp.1-2,4: title
+--
+-- MISC
+--  - Vol x Chp y: title
+--  - Chp y: title
+--  - Chp y Read Online
+--  - Chp.Foo Bar Read Online
+--  - Chp.0: [Oneshot]
+--  - Chp.0: [Complete]
 
 
 runTests :: IO ()
@@ -90,6 +218,8 @@ volParseData =
     , ("Vol.01v2", "")
     , ("Vol.01.3", "")
     , ("Vol.01.herp", "")
+    , ("Vol.01.herp omake", "")
+    , ("Vol.01 herp", "")
     , ("V.01", "")
     , ("V1", "")
     , ("V 1", "")
@@ -102,31 +232,6 @@ volParseData =
     , ("Vol 4.3", "")
     , ("Vol 4v2", "")
     ]
-
-
-
-
-
--- Format:
--- Vol 12 Ch 079: Name V
--- Vol TBD Ch 353: Foobar stuff
--- Ch 087: weird
--- Ch 000
--- Ch 032.5
--- Ch 032.1
--- Ch 087v2: foobar
--- Ch.23: foo
--- Vol.43 Ch.3234: Barz
--- Vol.32 Ch.123 Read Online
--- Vol.4 Chp.Extra: Foobar
--- Vol.4 Chp.Extra 2: Foobar
--- Ch.0: [Oneshot]
--- Ch.0: [Complete]
--- Vol.1 Ch.3 Extra: bar
--- Vol.03 Ch.13a
--- Vol.03 Ch.13cd
--- Vol.4 Chp.23-27: Foobar
--- Vol.2 Chp.Fanbook Omake Read Online
 
 
 
