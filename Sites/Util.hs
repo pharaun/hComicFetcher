@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 module Sites.Util
     ( volChpParse
     , fixChp
@@ -23,54 +24,119 @@ import Types
 volChpParse :: String -> String -> String -> ComicTag
 volChpParse = undefined
 
+
+--
+-- Formal Grammar Definition for Vol/Chp segments
+--
+-- {Vol}
+-- [ .]
+--
+-- ( {digits} | {text} )
+--
+--  {text} -> [A-z0-9 ]*{eof}
+--
+--  TODO: does not take care of "Vol 30a"
+--  {digits} -> ( {single_digit} | ( {simplified_digit},{digits} | {simplified_digit}-{simplified_digit} ( {eos} | ,{digits} ) ) )
+--
+--      {simplified_digit} -> [0-9]+ ( {version} | {simplified_subdigit}{version}? )?
+--
+--          {simplified_subdigit} -> [.][0-9]+
+--
+--  {single_digit} -> [0-9]+ ( {version} | {version}{subdigit:[ ]} | {subdigit:[.]} | {subdigit:[.]}{version} )
+--
+--      {subdigit} ->
+--
+--          TODO: does not take care of "Vol 30.9a"
+--          [.] -> ( [0-9]+ | [A-z][A-z0-9 ]+{eos} ) - TODO: this is probably a chapter label "Chp 09.Extra 2"
+--
+--          [ ] -> [A-z][A-z0-9 ]+ ( {eof} -> "Title" | {eos} -> "Chapter label" )
+--
+--  {version} -> v[0-9]+
+--
+--  {eof} -> End of Line
+--
+--  {eos} -> ( : {title} | {Chp..} | {eof} )
+--
 volParse :: ParsecT String u Identity [String]
 volParse = do
-    label <- choice -- TODO: can probably make more efficient by building up from V,Vol,Volume
+    -- {Vol}
+    label <- choice
+        -- TODO: can probably make more efficient by building up from V,Vol,Volume
         [ try $ string "Volume"
-        , try $ string "Vol"
-        , string "V"
+        , string "Vol"
         ]
 
-    -- Eat a space/dot
+    -- [ .]
     skipMany $ oneOf " ."
 
-    -- Identifiers (tbd)
-    ident <- try $ string "TBD"
+    -- ( {digits} | {text} )
+    ident <- choice
+        [ try digitsParse
+        , textParse
+        ]
 
-    -- Version on vol
+    return [label, ident]
 
-    -- Subvol (x.5, Xa, X.foo)
 
-    -- Volume span/collections (2-3, 4,5,3)
-
+-- {text} -> [A-z0-9 ]*{eof}
+textParse :: ParsecT String u Identity String
+textParse = do
     rest <- many anyChar
-
-    return [label, ident, rest]
-
-
-numParse :: ParsecT String u Identity [String]
-numParse = do
-    v <- (many1 (choice [digit, char '-'])) `sepBy` (char ',')
+    eof
+    return rest
 
 
-    rest <- many anyChar
-    return $ v ++ [rest]
+-- {digits} -> ( {single_digit} | ( {simplified_digit},{digits} | {simplified_digit}-{simplified_digit} ( {eos} | ,{digits} ) ) )
+digitsParse :: ParsecT String u Identity String
+digitsParse = undefined
 
+-- {simplified_digit} -> [0-9]+ ( {version} | {simplified_subdigit}{version}? )?
+simplifiedDigit :: ParsecT String u Identity [String]
+simplifiedDigit = do
+    digits <- many1 digit
+    subdigits <- option "" simplifiedSubDigit -- TODO: convert to an option Maybe
+    version <- option "" version -- TODO: also convert to an option maybe
 
-testNum = mapM_ (parseTest numParse)
-    [ "1"
-    , "01"
-    , "01v2"
-    , "01.3"
-    , "01.herp"
-    , "01.herp derp"
-    , "01 herp derp"
-    , "1,2,3"
-    , "1-3"
-    , "1,3-5"
-    , "1-3,5"
-    , "1a"
-    ]
+    return [digits, subdigits, version]
+
+-- {simplified_subdigit} -> [.][0-9]+
+simplifiedSubDigit :: ParsecT String u Identity String
+simplifiedSubDigit = do
+    char '.'
+    return =<< many1 digit
+
+-- {single_digit} -> [0-9]+ ( {version} | {version}{subdigit:[ ]} | {subdigit:[.]} | {subdigit:[.]}{version} )
+singleDigit :: ParsecT String u Identity String
+singleDigit = undefined
+
+-- {subdigit} ->
+--     [.] -> ( [0-9]+ | [A-z][A-z0-9 ]+{eos} ) - TODO: this is probably a chapter label "Chp 09.Extra 2"
+--     [ ] -> [A-z][A-z0-9 ]+ ( {eof} -> "Title" | {eos} -> "Chapter label" )
+subDigit :: ParsecT String u Identity String
+subDigit = undefined
+
+-- {version} -> v[0-9]+
+version :: ParsecT String u Identity String
+version = do
+    char 'v'
+    return =<< many1 digit
+
+-- {eos} -> ( : {title} | {Chp..} | {eof} )
+eos :: ParsecT String u Identity String
+eos = do
+    eos <- choice
+        [ (oneOf ":" >> spaces >> many1 anyChar)
+        , (do
+            -- TODO: extend this to attempt an valid Chp parse?
+            chp  <- string "Chp"
+            rest <- many1 anyChar
+            return $ chp ++ rest
+          )
+        , string "" -- Hack to make it accept an empty string and match on eof
+        ]
+    eof
+    return eos
+
 
 
 
@@ -87,40 +153,6 @@ testNum = mapM_ (parseTest numParse)
 --  - Attempt to break up Vol/Chp?
 
 
---
--- Formal Grammar Definition for Vol/Chp segments
---
--- IFF - If and only If
---
--- {Vol}
--- [ .]
---
--- ( {text} | {digits} )
---
---  {text} -> ( TBD | [A-z0-9 ]+ ){eos} - Basically anything except {eos}
---
---  {digits} -> ( {single_digit} | ( {single_digit},{digits} | {single_digit}-{single_digit} ( {eos} | ,{digits} ) ) )
---      TODO: not sure if ^ is the best rule
---      TODO: extend digits rules to include 1-2 and 1,2 approaches
---      TODO: do not allow text (only allow version) in the multi-digit & spread-digit
---
---  {single_digit} -> [0-9]+ ( {version}?{sub_digit:[ ]}? | {sub_digit}? )
---
---      {sub_digit}
---      [.] -> ( [0-9]+ | [A-z0-9 ]+{eos} ) - TODO: this means its probably the chapter label such as "Chp 09.Extra 2"
---
---      [ ] -> ( [A-z0-9 ]+{eol} ) - IFF there is no {next_section}
---          (IE. if its "Chp 0 Foobar", "Foobar" is the title. Otherwise if "Chp 0 Foobar: Bar" the "Foobar" is a chapter label
---
---      {version}
---      [v] -> v[0-9]+ - If and only if followed by [0-9]+ otherwise it is {text/label of some sort}
---
---  {eol} -> End of Line
---
---  {eos} -> ( maybe [ ] | : {title} | {Chp..} | {eol}
---
---  {next_section} -> ( : {title} | {Chp..} )
---
 
 -- Format:
 -- Chp 00
@@ -370,3 +402,32 @@ multiplerWordTable =
     , ("nonillion", 1000000000000000000000000000000)
     , ("decillion", 1000000000000000000000000000000000)
     ]
+
+
+----  {text} -> [A-z][A-z0-9 ]+ {eos} - Basically anything except {eos}
+--textParse :: ParsecT String u Identity String
+--textParse = do
+--    firstLetter <- letter
+--    rest <- option "" consumeRest
+--
+--    return $ firstLetter : rest
+--
+--   where
+--    -- Make sure we are not followed by {eos} and keep consuming
+--    consumeRest = do
+--        -- Custom {eos} rules
+--        rest <- many1 $ noneOf ":Cc"
+--
+--        -- Verify that its not followed by : or Chp, if its not, keep consuming
+--        notFollowedBy eos <|> eof
+--
+--        -- Consume next char then resume parsing
+--        nextChar <- optionMaybe anyChar
+--
+--        case nextChar of
+--            Nothing -> return rest
+--            Just c  -> do
+--                -- Resume parsing
+--                nextRest <- option "" consumeRest
+--
+--                return $ rest ++ [c] ++ nextRest
