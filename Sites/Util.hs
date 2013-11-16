@@ -42,7 +42,7 @@ volChpParse = undefined
 --
 --          {simplified_subdigit} -> [.][0-9]+
 --
---  {single_digit} -> [0-9]+ ( {version} | {version}{subdigit:[ ]} | {subdigit:[.]} | {subdigit:[.]}{version} )
+--  {single_digit} -> [0-9]+ ( {version} | {version}{subdigit:[ ]} | {subdigit:[.]} | {subdigit:[.]}{version} )?
 --
 --      {subdigit} ->
 --
@@ -105,15 +105,50 @@ simplifiedSubDigit = do
     char '.'
     return =<< many1 digit
 
--- {single_digit} -> [0-9]+ ( {version} | {version}{subdigit:[ ]} | {subdigit:[.]} | {subdigit:[.]}{version} )
+-- {single_digit} -> [0-9]+ ( {version} | {version}{subdigit:[ ]} | {subdigit:[.]} | {subdigit:[.]}{version} )?
 singleDigit :: ParsecT String u Identity String
 singleDigit = undefined
 
 -- {subdigit} ->
 --     [.] -> ( [0-9]+ | [A-z][A-z0-9 ]+{eos} ) - TODO: this is probably a chapter label "Chp 09.Extra 2"
+dotSubDigit :: ParsecT String u Identity String
+dotSubDigit = do
+    char '.'
+
+    subDigit <- choice
+        [ many1 digit
+        , (do
+            firstChar <- letter
+            rest <- consumeRest -- TODO: fix this, if it fails it fails, no trying {eof}
+
+            return $ firstChar : rest
+          )
+        ]
+
+    return subDigit
+
+-- {subdigit} ->
 --     [ ] -> [A-z][A-z0-9 ]+ ( {eof} -> "Title" | {eos} -> "Chapter label" )
-subDigit :: ParsecT String u Identity String
-subDigit = undefined
+spaceSubDigit :: ParsecT String u Identity String
+spaceSubDigit = do
+    char ' '
+
+    subDigit <- choice
+        [ (do
+            firstChar <- letter
+            rest <- consumeRest -- TODO: fix this, if it fails it fails, no trying {eof}
+
+            return $ firstChar : rest
+          )
+        , (do
+            firstChar <- letter
+            rest <- many1 anyChar
+            eof
+
+            return $ firstChar : rest
+           )
+        ]
+    return subDigit
 
 -- {version} -> v[0-9]+
 version :: ParsecT String u Identity String
@@ -136,6 +171,30 @@ eos = do
         ]
     eof
     return eos
+
+-- TODO: this part is the most questionable part followed by {eos}
+-- Make sure we are not followed by {eos} and keep consuming
+--  [A-z][A-z0-9 ]+{eos}
+--  [A-z][A-z0-9 ]+ ( {eof} -> "Title" | {eos} -> "Chapter label" )
+consumeRest :: ParsecT String u Identity String
+consumeRest = do
+    -- Custom {eos} rules
+    rest <- many $ noneOf ":Cc" -- TODO: make it general for volume, etc
+
+    -- Verify that its not followed by : or Chp, if its not, keep consuming
+    notFollowedBy eos <|> eof
+
+    -- Consume next char then resume parsing
+    nextChar <- optionMaybe anyChar
+
+    case nextChar of
+        Nothing -> return rest
+        Just c  -> do
+            -- Resume parsing
+            nextRest <- option "" consumeRest
+
+            return $ rest ++ [c] ++ nextRest
+
 
 
 
