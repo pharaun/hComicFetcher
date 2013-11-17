@@ -13,6 +13,7 @@ import qualified Data.Text as T
 import Text.Parsec
 import Text.Parsec.String (Parser)
 import Data.Functor.Identity (Identity)
+import Control.Applicative ((*>), (<*), (<*>), (<$>), (<$))
 
 -- Testing
 import Test.HUnit
@@ -20,9 +21,68 @@ import Test.HUnit
 -- Local Imports
 import Types
 
+
+infixl 4 <++>
+f <++> g = (++) <$> f <*> g
+
+
 -- Site, Story, "Vol/Chp/etc" parse
 volChpParse :: String -> String -> String -> ComicTag
 volChpParse = undefined
+
+
+-- First pass
+--  - Trim string
+--  - Remove " Read Online"
+firstPass :: String -> T.Text
+firstPass t =
+    let clean = T.strip $ T.pack t
+    in case T.stripSuffix (T.pack " Read Online") clean of
+        Nothing -> clean
+        Just t' -> t'
+
+
+-- Second pass
+--  - Break up in 3 part vol, chp, and optional title
+--  - Trim the optional title
+--  - Check if its one that should be discarded? ([Oneshot], [Complete]) ?
+-- TODO: real data structure, not just array of strings
+-- TODO: Make this work with T.Text
+--
+-- {Vol}[ .]{...} {Chp}[ .]{...} [ :]{Chp Title}{eof}
+secondPass :: ParsecT String u Identity [(Keyword, String)]
+secondPass = many ((,) <$> parseKeyword <*> parseContent) <* eof
+
+data Keyword = Vol | Chp | Title deriving (Eq, Show)
+
+parseKeyword :: ParsecT String u Identity Keyword
+parseKeyword =
+    (Vol <$ string "Vol") <|>
+    (Chp <$ string "Chp") <|>
+    (Title <$ string ":") <?>
+    "keyword (Vol, Chp, Title)"
+
+parseContent :: ParsecT String u Identity String
+parseContent = (many space) <++> (("" <$ lookAhead (try parseKeyword)) <|> option "" (many1 (noneOf " \t:") <++> parseContent))
+
+
+-- Third pass
+--  - Parse each segment (vol, chp) in isolation
+thirdPass :: [(Keyword, String)] -> [String]
+thirdPass = undefined
+
+
+
+-- Chp Extra Content
+-- Chp Extra Content: title
+-- Chp 00 foobar
+-- Chp 00.foobar
+-- Chp 00 foobar: title
+-- Chp 00.foobar: title
+-- Chp 00: foobar
+
+
+
 
 
 --
@@ -72,10 +132,10 @@ volParse = do
     -- ( {digits} | {text} )
     ident <- choice
         [ try digitsParse
-        , textParse
+        , (:[]) `fmap` textParse
         ]
 
-    return [label, ident]
+    return $ label: ident
 
 
 -- {text} -> [A-z0-9 ]*{eof}
@@ -86,9 +146,39 @@ textParse = do
     return rest
 
 
--- {digits} -> ( {single_digit} | ( {simplified_digit},{digits} | {simplified_digit}-{simplified_digit} ( {eos} | ,{digits} ) ) )
-digitsParse :: ParsecT String u Identity String
-digitsParse = undefined
+-- {digits} -> ( {simplified_digit}-{simplified_digit}(,{digits})? | {simplified_digit}(,{digits})? | {single_digit} ){eos}
+digitsParse :: ParsecT String u Identity [String]
+digitsParse = do
+    -- Try for simplified digits first
+    digits <- choice
+        [ try (do
+            digit1 <- simplifiedDigit
+            char '-'
+            digit2 <- simplifiedDigit
+
+            keepGoing <- optionMaybe (char ',' >> digitsParse)
+            case keepGoing of
+                Nothing -> return $ digit1 ++ digit2
+                Just k  -> return $ digit1 ++ digit2 ++ k
+          )
+        , try (do
+            digit <- simplifiedDigit
+
+            keepGoing <- optionMaybe (char ',' >> digitsParse)
+            case keepGoing of
+                Nothing -> return digit
+                Just k  -> return $ digit ++ k
+          )
+        , (do
+            digit <- singleDigit
+            return digit
+          )
+        ]
+
+    -- TODO: do something about eos
+    -- TODO: this fails for - "1.5v3-5.1v1,10.0v6-22v1,29.Eternity,30" -> "29.Eternity,30" -> ["29", "", "Eternity,30"]
+
+    return digits
 
 -- {simplified_digit} -> [0-9]+ ( {version} | {simplified_subdigit}{version}? )?
 simplifiedDigit :: ParsecT String u Identity [String]
@@ -106,8 +196,25 @@ simplifiedSubDigit = do
     return =<< many1 digit
 
 -- {single_digit} -> [0-9]+ ( {version} | {version}{subdigit:[ ]} | {subdigit:[.]} | {subdigit:[.]}{version} )?
-singleDigit :: ParsecT String u Identity String
-singleDigit = undefined
+singleDigit :: ParsecT String u Identity [String]
+singleDigit = do
+    digit <- many1 digit
+
+    vers <- optionMaybe version
+    case vers of
+        Just v  -> do
+            subdigit <- option "" spaceSubDigit
+            return [digit, v, subdigit]
+
+        Nothing -> do
+            subdigit <- optionMaybe dotSubDigit
+            case subdigit of
+                Just d  -> do
+                    ver <- option "" version
+                    return [digit, ver, d]
+
+                Nothing -> return [digit, "", ""]
+
 
 -- {subdigit} ->
 --     [.] -> ( [0-9]+ | [A-z][A-z0-9 ]+{eos} ) - TODO: this is probably a chapter label "Chp 09.Extra 2"
@@ -196,20 +303,6 @@ consumeRest = do
             return $ rest ++ [c] ++ nextRest
 
 
-
-
-
--- First pass
---  - Trim string
---  - Remove " Read Online"
---
--- Second pass
---  - Break up in 2 part vol/chp and optional title
---  - Trim the optional title
---  - Check if its one that should be discarded? ([Oneshot], [Complete]) ?
---
--- Third pass
---  - Attempt to break up Vol/Chp?
 
 
 
