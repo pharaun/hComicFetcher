@@ -1,7 +1,4 @@
 {-# LANGUAGE FlexibleContexts #-}
---{-# LANGUAGE TypeSynonymInstances #-}
---{-# LANGUAGE FlexibleInstances #-}
---{-# LANGUAGE TypeFamilies #-}
 module Sites.Util
     ( volChpParse
     , fixChp
@@ -14,7 +11,6 @@ import qualified Data.Text as T
 
 -- Parsec
 import Text.Parsec
---import Text.Parsec.String (Parser)
 import Text.Parsec.Text
 import Data.Functor.Identity (Identity)
 import Control.Applicative ((*>), (<*), (<*>), (<$>), (<$))
@@ -27,30 +23,7 @@ import Test.HUnit
 import Types
 
 
--- Criterion Benchmark of mconcat
-import Criterion.Main
-import Criterion.Config
-
-main = do
-    let target1 = 'a'
-    let target2 = "b"
-    let target3 = T.pack "c"
-
-    let dest = T.pack "d"
-
-    let myConfig = defaultConfig { cfgSamples = ljust 1000 }
-
-    defaultMainWith myConfig (return ())
-        [ bgroup "T.Text concat"
-            [ bench "T.singleton" $ nf (T.append dest . T.singleton) target1
-            , bench "T.pack"      $ nf (T.append dest . T.pack) target2
-            , bench "mconcat"     $ nf (T.append dest . (mconcat . map T.singleton)) target2
-            , bench "id"          $ nf (T.append dest) target3
-            ]
-        ]
-
-
-
+-- Some pack Instances to make it easy to concat the output of parsec back into Text
 class PackToText a where
     toText :: a -> T.Text
 instance PackToText Char where
@@ -58,6 +31,7 @@ instance PackToText Char where
 instance PackToText T.Text where
     toText = id
 instance (PackToText a) => PackToText [a] where
+    -- Not the fastest instance on the block (7us vs 1.1us for T.pack) but fast enough
     toText = mconcat . map toText
 
 infixl 4 <++>
@@ -88,7 +62,7 @@ firstPass t =
 --
 -- {Vol}[ .]{...} {Chp}[ .]{...} [ :]{Chp Title}{eof}
 secondPass :: ParsecT T.Text u Identity [(Keyword, T.Text)]
-secondPass = many ((,) <$> parseKeyword <*> parseContent) <* eof
+secondPass = many ((,) <$> parseKeyword <*> (T.strip <$> parseContent)) <* eof
 
 data Keyword = Vol | Chp | Title deriving (Eq, Show)
 
@@ -107,18 +81,14 @@ parseContent = (T.pack <$> many space)
 
 -- Third pass
 --  - Parse each segment (vol, chp) in isolation
-thirdPass :: [(Keyword, String)] -> [String]
-thirdPass = undefined
+thirdPass :: [(Keyword, T.Text)] -> [T.Text]
+thirdPass = mconcat . map pass
+    where
+        pass :: (Keyword, T.Text) -> [T.Text]
+        pass (Title, t) = [t]
+        pass (Vol, t) = [t]
+        pass (Chp, t) = [t]
 
-
-
--- Chp Extra Content
--- Chp Extra Content: title
--- Chp 00 foobar
--- Chp 00.foobar
--- Chp 00 foobar: title
--- Chp 00.foobar: title
--- Chp 00: foobar
 
 
 
@@ -126,6 +96,7 @@ thirdPass = undefined
 
 --
 -- Formal Grammar Definition for Vol/Chp segments
+-- TODO: Modernize/update this for the pre-segmented volume/chapter
 --
 -- {Vol}
 -- [ .]
@@ -622,3 +593,19 @@ multiplerWordTable =
 --                nextRest <- option "" consumeRest
 --
 --                return $ rest ++ [c] ++ nextRest
+--
+--packTextBenchmark = do
+--    let target2 = "this is an pretty long string full of stuff and you know"
+--    let target3 = T.pack "this is an pretty long string full of stuff and you know"
+--
+--    let dest = T.pack "this is an pretty long string full of stuff and you know"
+--
+--    let myConfig = defaultConfig { cfgSamples = ljust 10000 }
+--
+--    defaultMainWith myConfig (return ())
+--        [ bgroup "T.Text concat"
+--            [ bench "T.pack"      $ nf (T.append dest . T.pack) target2
+--            , bench "mconcat"     $ nf (T.append dest . (mconcat . map T.singleton)) target2
+--            , bench "id"          $ nf (T.append dest) target3
+--            ]
+--        ]
