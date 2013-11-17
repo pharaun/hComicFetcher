@@ -1,4 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
+--{-# LANGUAGE TypeSynonymInstances #-}
+--{-# LANGUAGE FlexibleInstances #-}
+--{-# LANGUAGE TypeFamilies #-}
 module Sites.Util
     ( volChpParse
     , fixChp
@@ -11,9 +14,11 @@ import qualified Data.Text as T
 
 -- Parsec
 import Text.Parsec
-import Text.Parsec.String (Parser)
+--import Text.Parsec.String (Parser)
+import Text.Parsec.Text
 import Data.Functor.Identity (Identity)
 import Control.Applicative ((*>), (<*), (<*>), (<$>), (<$))
+import Data.Monoid (mconcat)
 
 -- Testing
 import Test.HUnit
@@ -22,8 +27,41 @@ import Test.HUnit
 import Types
 
 
+-- Criterion Benchmark of mconcat
+import Criterion.Main
+import Criterion.Config
+
+main = do
+    let target1 = 'a'
+    let target2 = "b"
+    let target3 = T.pack "c"
+
+    let dest = T.pack "d"
+
+    let myConfig = defaultConfig { cfgSamples = ljust 1000 }
+
+    defaultMainWith myConfig (return ())
+        [ bgroup "T.Text concat"
+            [ bench "T.singleton" $ nf (T.append dest . T.singleton) target1
+            , bench "T.pack"      $ nf (T.append dest . T.pack) target2
+            , bench "mconcat"     $ nf (T.append dest . (mconcat . map T.singleton)) target2
+            , bench "id"          $ nf (T.append dest) target3
+            ]
+        ]
+
+
+
+class PackToText a where
+    toText :: a -> T.Text
+instance PackToText Char where
+    toText = T.singleton
+instance PackToText T.Text where
+    toText = id
+instance (PackToText a) => PackToText [a] where
+    toText = mconcat . map toText
+
 infixl 4 <++>
-f <++> g = (++) <$> f <*> g
+f <++> g = (\x y -> toText x `T.append` toText y) <$> f <*> g
 
 
 -- Site, Story, "Vol/Chp/etc" parse
@@ -34,9 +72,10 @@ volChpParse = undefined
 -- First pass
 --  - Trim string
 --  - Remove " Read Online"
-firstPass :: String -> T.Text
+--  - TODO: Check if its one that should be discarded? ([Oneshot], [Complete]) ?
+firstPass :: T.Text -> T.Text
 firstPass t =
-    let clean = T.strip $ T.pack t
+    let clean = T.strip t
     in case T.stripSuffix (T.pack " Read Online") clean of
         Nothing -> clean
         Just t' -> t'
@@ -44,26 +83,26 @@ firstPass t =
 
 -- Second pass
 --  - Break up in 3 part vol, chp, and optional title
---  - Trim the optional title
---  - Check if its one that should be discarded? ([Oneshot], [Complete]) ?
--- TODO: real data structure, not just array of strings
--- TODO: Make this work with T.Text
+--  - TODO: Trim the optional title
+--  - TODO: Make this work with T.Text
 --
 -- {Vol}[ .]{...} {Chp}[ .]{...} [ :]{Chp Title}{eof}
-secondPass :: ParsecT String u Identity [(Keyword, String)]
+secondPass :: ParsecT T.Text u Identity [(Keyword, T.Text)]
 secondPass = many ((,) <$> parseKeyword <*> parseContent) <* eof
 
 data Keyword = Vol | Chp | Title deriving (Eq, Show)
 
-parseKeyword :: ParsecT String u Identity Keyword
+parseKeyword :: ParsecT T.Text u Identity Keyword
 parseKeyword =
     (Vol <$ string "Vol") <|>
     (Chp <$ string "Chp") <|>
     (Title <$ string ":") <?>
     "keyword (Vol, Chp, Title)"
 
-parseContent :: ParsecT String u Identity String
-parseContent = (many space) <++> (("" <$ lookAhead (try parseKeyword)) <|> option "" (many1 (noneOf " \t:") <++> parseContent))
+parseContent :: ParsecT T.Text u Identity T.Text
+parseContent = (T.pack <$> many space)
+          <++> ((T.pack "" <$ lookAhead (try parseKeyword))
+           <|> option (T.pack "") (T.pack <$> many1 (noneOf " \t:") <++> parseContent))
 
 
 -- Third pass
