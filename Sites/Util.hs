@@ -25,8 +25,6 @@ import Test.HUnit
 -- Local Imports
 import Types
 
-import Debug.Trace
-
 
 -- Some pack Instances to make it easy to concat the output of parsec back into Text
 class PackToText a where
@@ -45,46 +43,72 @@ f <++> g = (\x y -> toText x `T.append` toText y) <$> f <*> g
 
 
 -- Site, Story, "Vol/Chp/etc" parse
-volChpParse :: String -> Maybe String -> String -> ComicTag
+volChpParse :: String -> Maybe String -> String -> ComicTagV2
 volChpParse site story segment
     -- There's nothing to parse
-    | null segment = ComicTag (T.pack site) (maybe Nothing (Just . T.pack) story) Nothing Nothing Nothing
+    | null segment = ComicTagV2 (T.pack site) (maybe Nothing (Just . T.pack) story) [] Nothing
 
     -- Let's get the parsing party on
     | otherwise = case (breakSegment $ cleanSegment (T.pack segment)) of
 
         -- TODO: evil bits
-        Left e -> error e
-        Right s-> do
+        Left e  -> error e
+        Right s -> do
+            -- Grab one of each keyword if it exists
+            let vol = DL.lookup Vol s
+            let chp = DL.lookup Chp s
+            let title = DL.lookup Title s
 
+            -- Volume or Chapter is optional as long as we have 1 of either, title is optional as well
+            case vol of
+                Nothing ->
+                    case chp of
+                        Nothing -> error "Missing both Volume and Chapter"
+                        Just c  ->
+                            case (parse parseSegment "Chapter" c) of
+                                Left e  -> error $ show e
+                                Right d ->
+                                    let unitTag = UnitTagV2 d title ChpTag
+                                    in ComicTagV2 (T.pack site) (maybe Nothing (Just . T.pack) story) [unitTag] Nothing
 
+                Just v  ->
+                    case (parse parseSegment "Volume" v) of
+                        Left e  -> error $ show e
+                        Right d ->
+                            case chp of
+                                Nothing ->
+                                    let volUnitTag = UnitTagV2 d title VolTag
+                                    in ComicTagV2 (T.pack site) (maybe Nothing (Just . T.pack) story) [volUnitTag] Nothing
 
+                                Just c  ->
+                                    case (parse parseSegment "Volume" v) of
+                                        Left e  -> error $ show e
+                                        Right d' ->
+                                            let volUnitTag = UnitTagV2 d Nothing VolTag
+                                                chpUnitTag = UnitTagV2 d' title ChpTag
 
-            -- STFU
-            traceShow s $ ComicTag (T.pack site) (maybe Nothing (Just . T.pack) story) Nothing Nothing Nothing
-
+                                            in ComicTagV2 (T.pack site) (maybe Nothing (Just . T.pack) story) [volUnitTag, chpUnitTag] Nothing
 
 
 ---- Filesystem format - SiteName/StoryName/Volume/Chapter/Page.*
---data ComicTag = ComicTag
---    { ctSiteName :: T.Text
---    , ctStoryName :: Maybe T.Text
---
---    , ctVolume :: Maybe UnitTag
---    , ctChapter :: Maybe UnitTag
---
---    , ctFileName :: Maybe T.Text -- TODO: need to find a way to make this mandatory...
-----    , ctPage :: Maybe UnitTag --  TODO: Implement this, for now we just use file name
---    }
---    deriving (Show)
---
---data UnitTag = UnitTag
---    { utNumber :: Integer
---    , utTitle :: Maybe T.Text
---    }
---    deriving (Show)
---
---data UnitTagType = UnitTagVolume | UnitTagChapter
+data ComicTagV2 = ComicTagV2
+    { ctaSiteName :: T.Text
+    , ctaStoryName :: Maybe T.Text
+
+    , ctaUnits :: [UnitTagV2]
+
+    , ctaFileName :: Maybe T.Text
+    }
+    deriving (Show)
+
+data UnitTagV2 = UnitTagV2
+    { utaNumber :: [Digits]
+    , utaTitle :: Maybe T.Text
+    , utaType :: UnitTagTypeV2
+    }
+    deriving (Show)
+
+data UnitTagTypeV2 = VolTag | ChpTag deriving (Show)
 
 
 -- First pass
@@ -140,21 +164,12 @@ parseContent = (T.pack <$> many space)
            <|> option T.empty (T.pack <$> many1 (noneOf " \t:") <++> parseContent))
 
 
+
+
 -- Third pass
 --  - Parse each segment (vol, chp) in isolation
---thirdPass :: [(Keyword, T.Text)] -> [PassThree]
---thirdPass = map pass
---    where
---        pass :: (Keyword, T.Text) -> PassThree
---        pass (Title, t) = PTitle t
---        pass (_, t) = parseSegment t
-
-
-
-
-
-parseSegment :: ParsecT T.Text u Identity ([Digits], T.Text)
-parseSegment = (skipMany $ oneOf " .") *> ((,) <$> option [] digitsParse <*> textParse) <* eof
+parseSegment :: ParsecT T.Text u Identity [Digits]
+parseSegment = (skipMany $ oneOf " .") *> option [] digitsParse <* eof
 
 
 data Digits = RangeDigit Digit Digit
@@ -214,6 +229,7 @@ data SubDigit = DotSubDigit (Maybe Integer) T.Text
               deriving (Show)
 
 -- {simplified_subdigit} -> [.]{num}
+--  TODO: have this fail? if there's nothing after the dot
 simplifiedSubDigit :: ParsecT T.Text u Identity SubDigit
 simplifiedSubDigit = char '.' >> (DotSubDigit <$> (Just <$> numParse) <*> (pure T.empty))
 
@@ -222,6 +238,7 @@ simplifiedSubDigit = char '.' >> (DotSubDigit <$> (Just <$> numParse) <*> (pure 
 --  TODO: First case its probably 10.9a, second case .Foobar (thus a label)
 --  TODO: Maybe have a textParse that will parse space or not
 --  TODO: Fix this so it will check that its not a version first
+--  TODO: have this fail? if there's nothing after the dot
 dotSubDigit :: ParsecT T.Text u Identity SubDigit
 dotSubDigit = char '.' >> (DotSubDigit <$> optionMaybe numParse <*> option T.empty textParse)
 
@@ -468,20 +485,3 @@ multiplerWordTable =
     , ("nonillion", 1000000000000000000000000000000)
     , ("decillion", 1000000000000000000000000000000000)
     ]
-
-
---packTextBenchmark = do
---    let target2 = "this is an pretty long string full of stuff and you know"
---    let target3 = T.pack "this is an pretty long string full of stuff and you know"
---
---    let dest = T.pack "this is an pretty long string full of stuff and you know"
---
---    let myConfig = defaultConfig { cfgSamples = ljust 10000 }
---
---    defaultMainWith myConfig (return ())
---        [ bgroup "T.Text concat"
---            [ bench "T.pack"      $ nf (T.append dest . T.pack) target2
---            , bench "mconcat"     $ nf (T.append dest . (mconcat . map T.singleton)) target2
---            , bench "id"          $ nf (T.append dest) target3
---            ]
---        ]
