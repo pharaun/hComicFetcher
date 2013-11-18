@@ -13,7 +13,7 @@ import qualified Data.Text as T
 import Text.Parsec
 import Text.Parsec.Text
 import Data.Functor.Identity (Identity)
-import Control.Applicative ((*>), (<*), (<*>), (<$>), (<$))
+import Control.Applicative ((*>), (<*), (<*>), (<$>), (<$), pure, liftA)
 import Data.Monoid (mconcat)
 
 -- Testing
@@ -57,12 +57,11 @@ firstPass t =
 
 -- Second pass
 --  - Break up in 3 part vol, chp, and optional title
---  - TODO: Trim the optional title
---  - TODO: Make this work with T.Text
+--  - TODO: Reconstruct the title if it parses multiples
 --
 -- {Vol}[ .]{...} {Chp}[ .]{...} [ :]{Chp Title}{eof}
 secondPass :: ParsecT T.Text u Identity [(Keyword, T.Text)]
-secondPass = many ((,) <$> parseKeyword <*> (T.strip <$> parseContent)) <* eof
+secondPass = many ((,) <$> parseKeyword <*> parseContent) <* eof
 
 data Keyword = Vol | Chp | Title deriving (Eq, Show)
 
@@ -75,8 +74,8 @@ parseKeyword =
 
 parseContent :: ParsecT T.Text u Identity T.Text
 parseContent = (T.pack <$> many space)
-          <++> ((T.pack "" <$ lookAhead (try parseKeyword))
-           <|> option (T.pack "") (T.pack <$> many1 (noneOf " \t:") <++> parseContent))
+          <++> ((T.empty <$ lookAhead (try parseKeyword))
+           <|> option T.empty (T.pack <$> many1 (noneOf " \t:") <++> parseContent))
 
 
 -- Third pass
@@ -86,78 +85,36 @@ thirdPass = mconcat . map pass
     where
         pass :: (Keyword, T.Text) -> [T.Text]
         pass (Title, t) = [t]
-        pass (Vol, t) = [t]
-        pass (Chp, t) = [t]
+        pass (_, t) = [t]
 
-
-
-
-
-
---
--- Formal Grammar Definition for Vol/Chp segments
--- TODO: Modernize/update this for the pre-segmented volume/chapter
---
--- {Vol}
--- [ .]
---
--- ( {digits} | {text} )
---
---  {text} -> [A-z0-9 ]*{eof}
---
---  TODO: does not take care of "Vol 30a"
---  {digits} -> ( {single_digit} | ( {simplified_digit},{digits} | {simplified_digit}-{simplified_digit} ( {eos} | ,{digits} ) ) )
---
---      {simplified_digit} -> [0-9]+ ( {version} | {simplified_subdigit}{version}? )?
---
---          {simplified_subdigit} -> [.][0-9]+
---
---  {single_digit} -> [0-9]+ ( {version} | {version}{subdigit:[ ]} | {subdigit:[.]} | {subdigit:[.]}{version} )?
---
---      {subdigit} ->
---
---          TODO: does not take care of "Vol 30.9a"
---          [.] -> ( [0-9]+ | [A-z][A-z0-9 ]+{eos} ) - TODO: this is probably a chapter label "Chp 09.Extra 2"
---
---          [ ] -> [A-z][A-z0-9 ]+ ( {eof} -> "Title" | {eos} -> "Chapter label" )
---
---  {version} -> v[0-9]+
---
---  {eof} -> End of Line
---
---  {eos} -> ( : {title} | {Chp..} | {eof} )
---
 volParse :: ParsecT String u Identity [String]
-volParse = do
-    -- {Vol}
-    label <- choice
-        -- TODO: can probably make more efficient by building up from V,Vol,Volume
-        [ try $ string "Volume"
-        , string "Vol"
-        ]
-
-    -- [ .]
-    skipMany $ oneOf " ."
-
-    -- ( {digits} | {text} )
-    ident <- choice
-        [ try digitsParse
-        , (:[]) `fmap` textParse
-        ]
-
-    return $ label: ident
-
-
--- {text} -> [A-z0-9 ]*{eof}
-textParse :: ParsecT String u Identity String
-textParse = do
-    rest <- many anyChar
-    eof
-    return rest
+volParse = undefined
+--volParse = do
+--    -- {Vol}
+--    label <- choice
+--        -- TODO: can probably make more efficient by building up from V,Vol,Volume
+--        [ try $ string "Volume"
+--        , string "Vol"
+--        ]
+--
+--    -- [ .]
+--    skipMany $ oneOf " ."
+--
+--    -- ( {digits} | {text} )
+--    ident <- choice
+--        [ try digitsParse
+--        , (:[]) `fmap` textParse
+--        ]
+--
+--    return $ label: ident
 
 
--- {digits} -> ( {simplified_digit}-{simplified_digit}(,{digits})? | {simplified_digit}(,{digits})? | {single_digit} ){eos}
-digitsParse :: ParsecT String u Identity [String]
+data Digits = RangeDigit Digit Digit
+            | StandAlone Digit
+            deriving (Show)
+
+-- {digits} -> ( {simplified_digit}-{simplified_digit}(,{digits})? | {simplified_digit}(,{digits})? | {single_digit} ){eof}
+digitsParse :: ParsecT T.Text u Identity [Digits]
 digitsParse = do
     -- Try for simplified digits first
     digits <- choice
@@ -168,150 +125,78 @@ digitsParse = do
 
             keepGoing <- optionMaybe (char ',' >> digitsParse)
             case keepGoing of
-                Nothing -> return $ digit1 ++ digit2
-                Just k  -> return $ digit1 ++ digit2 ++ k
+                Nothing -> return [RangeDigit digit1 digit2]
+                Just k  -> return $ RangeDigit digit1 digit2 : k
           )
         , try (do
             digit <- simplifiedDigit
 
             keepGoing <- optionMaybe (char ',' >> digitsParse)
             case keepGoing of
-                Nothing -> return digit
-                Just k  -> return $ digit ++ k
+                Nothing -> return [StandAlone digit]
+                Just k  -> return $ StandAlone digit : k
           )
         , (do
             digit <- singleDigit
-            return digit
+            return [StandAlone digit]
           )
         ]
 
-    -- TODO: do something about eos
-    -- TODO: this fails for - "1.5v3-5.1v1,10.0v6-22v1,29.Eternity,30" -> "29.Eternity,30" -> ["29", "", "Eternity,30"]
-
+    -- TODO: this fails for - "1.5v3-5.1v1,10.0v6-22v1,29.Eternity,30"
+    -- [RangeDigit (Digit 1 (Just (DotSubDigit (Just 5) "")) (Just 3)) (Digit 5 (Just (DotSubDigit (Just 1) "")) (Just 1)),RangeDigit (Digit 10 (Just (DotSubDigit (Just 0) "")) (Just 6)) (Digit 22 Nothing (Just 1)),StandAlone (Digit 29 (Just (DotSubDigit Nothing "Eternity,30")) Nothing)]
+    --
     return digits
 
--- {simplified_digit} -> [0-9]+ ( {version} | {simplified_subdigit}{version}? )?
-simplifiedDigit :: ParsecT String u Identity [String]
-simplifiedDigit = do
-    digits <- many1 digit
-    subdigits <- option "" simplifiedSubDigit -- TODO: convert to an option Maybe
-    version <- option "" version -- TODO: also convert to an option maybe
 
-    return [digits, subdigits, version]
+data Digit = Digit Integer (Maybe SubDigit) (Maybe Integer)
+           deriving (Show)
 
--- {simplified_subdigit} -> [.][0-9]+
-simplifiedSubDigit :: ParsecT String u Identity String
-simplifiedSubDigit = do
-    char '.'
-    return =<< many1 digit
 
--- {single_digit} -> [0-9]+ ( {version} | {version}{subdigit:[ ]} | {subdigit:[.]} | {subdigit:[.]}{version} )?
-singleDigit :: ParsecT String u Identity [String]
+--  {single_digit} -> {num} ( {subdigit:[.]}{version} | {subdigit:[.]} | {text} )?
+singleDigit :: ParsecT T.Text u Identity Digit
 singleDigit = do
-    digit <- many1 digit
+    digit <- numParse
+--  TODO: Fix this so it will check that its not a version first
+    subdigit <- optionMaybe dotSubDigit
+    version <- optionMaybe version
 
-    vers <- optionMaybe version
-    case vers of
-        Just v  -> do
-            subdigit <- option "" spaceSubDigit
-            return [digit, v, subdigit]
+    -- TODO: extend this to deal with {text} case
+    return $ Digit digit subdigit version
 
-        Nothing -> do
-            subdigit <- optionMaybe dotSubDigit
-            case subdigit of
-                Just d  -> do
-                    ver <- option "" version
-                    return [digit, ver, d]
-
-                Nothing -> return [digit, "", ""]
+-- {simplified_digit} -> {num} ( {simplified_subdigit}?{version}? )
+simplifiedDigit :: ParsecT T.Text u Identity Digit
+simplifiedDigit = Digit <$> numParse <*> optionMaybe simplifiedSubDigit <*> optionMaybe version
 
 
--- {subdigit} ->
---     [.] -> ( [0-9]+ | [A-z][A-z0-9 ]+{eos} ) - TODO: this is probably a chapter label "Chp 09.Extra 2"
-dotSubDigit :: ParsecT String u Identity String
-dotSubDigit = do
-    char '.'
+-- Sub Digits
+data SubDigit = DotSubDigit (Maybe Integer) T.Text
+              deriving (Show)
 
-    subDigit <- choice
-        [ many1 digit
-        , (do
-            firstChar <- letter
-            rest <- consumeRest -- TODO: fix this, if it fails it fails, no trying {eof}
-
-            return $ firstChar : rest
-          )
-        ]
-
-    return subDigit
+-- {simplified_subdigit} -> [.]{num}
+simplifiedSubDigit :: ParsecT T.Text u Identity SubDigit
+simplifiedSubDigit = char '.' >> (DotSubDigit <$> (Just <$> numParse) <*> (pure T.empty))
 
 -- {subdigit} ->
---     [ ] -> [A-z][A-z0-9 ]+ ( {eof} -> "Title" | {eos} -> "Chapter label" )
-spaceSubDigit :: ParsecT String u Identity String
-spaceSubDigit = do
-    char ' '
+--     [.] -> ( {num}{text} | {text} )
+--  TODO: First case its probably 10.9a, second case .Foobar (thus a label)
+--  TODO: Maybe have a textParse that will parse space or not
+--  TODO: Fix this so it will check that its not a version first
+dotSubDigit :: ParsecT T.Text u Identity SubDigit
+dotSubDigit = char '.' >> (DotSubDigit <$> optionMaybe numParse <*> option T.empty textParse)
 
-    subDigit <- choice
-        [ (do
-            firstChar <- letter
-            rest <- consumeRest -- TODO: fix this, if it fails it fails, no trying {eof}
 
-            return $ firstChar : rest
-          )
-        , (do
-            firstChar <- letter
-            rest <- many1 anyChar
-            eof
+-- {version} -> v{num}
+version :: ParsecT T.Text u Identity Integer
+version = char 'v' *> numParse
 
-            return $ firstChar : rest
-           )
-        ]
-    return subDigit
+--  {num} -> [0-9]+
+numParse :: ParsecT T.Text u Identity Integer
+numParse = liftA read (many1 digit)
 
--- {version} -> v[0-9]+
-version :: ParsecT String u Identity String
-version = do
-    char 'v'
-    return =<< many1 digit
-
--- {eos} -> ( : {title} | {Chp..} | {eof} )
-eos :: ParsecT String u Identity String
-eos = do
-    eos <- choice
-        [ (oneOf ":" >> spaces >> many1 anyChar)
-        , (do
-            -- TODO: extend this to attempt an valid Chp parse?
-            chp  <- string "Chp"
-            rest <- many1 anyChar
-            return $ chp ++ rest
-          )
-        , string "" -- Hack to make it accept an empty string and match on eof
-        ]
-    eof
-    return eos
-
--- TODO: this part is the most questionable part followed by {eos}
--- Make sure we are not followed by {eos} and keep consuming
---  [A-z][A-z0-9 ]+{eos}
---  [A-z][A-z0-9 ]+ ( {eof} -> "Title" | {eos} -> "Chapter label" )
-consumeRest :: ParsecT String u Identity String
-consumeRest = do
-    -- Custom {eos} rules
-    rest <- many $ noneOf ":Cc" -- TODO: make it general for volume, etc
-
-    -- Verify that its not followed by : or Chp, if its not, keep consuming
-    notFollowedBy eos <|> eof
-
-    -- Consume next char then resume parsing
-    nextChar <- optionMaybe anyChar
-
-    case nextChar of
-        Nothing -> return rest
-        Just c  -> do
-            -- Resume parsing
-            nextRest <- option "" consumeRest
-
-            return $ rest ++ [c] ++ nextRest
-
+-- {text} -> [A-z][A-z0-9 ]*{eof}
+-- TODO: maybe make this optional to make parsing easier
+textParse :: ParsecT T.Text u Identity T.Text
+textParse = letter <++> many anyChar <* eof
 
 
 
@@ -566,34 +451,6 @@ multiplerWordTable =
     ]
 
 
-----  {text} -> [A-z][A-z0-9 ]+ {eos} - Basically anything except {eos}
---textParse :: ParsecT String u Identity String
---textParse = do
---    firstLetter <- letter
---    rest <- option "" consumeRest
---
---    return $ firstLetter : rest
---
---   where
---    -- Make sure we are not followed by {eos} and keep consuming
---    consumeRest = do
---        -- Custom {eos} rules
---        rest <- many1 $ noneOf ":Cc"
---
---        -- Verify that its not followed by : or Chp, if its not, keep consuming
---        notFollowedBy eos <|> eof
---
---        -- Consume next char then resume parsing
---        nextChar <- optionMaybe anyChar
---
---        case nextChar of
---            Nothing -> return rest
---            Just c  -> do
---                -- Resume parsing
---                nextRest <- option "" consumeRest
---
---                return $ rest ++ [c] ++ nextRest
---
 --packTextBenchmark = do
 --    let target2 = "this is an pretty long string full of stuff and you know"
 --    let target3 = T.pack "this is an pretty long string full of stuff and you know"
