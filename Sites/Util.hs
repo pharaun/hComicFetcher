@@ -15,12 +15,17 @@ import Text.Parsec.Text
 import Data.Functor.Identity (Identity)
 import Control.Applicative ((*>), (<*), (<*>), (<$>), (<$), pure, liftA)
 import Data.Monoid (mconcat)
+import Data.Either (either)
+import Data.Maybe (maybe)
+import Control.Monad
 
 -- Testing
 import Test.HUnit
 
 -- Local Imports
 import Types
+
+import Debug.Trace
 
 
 -- Some pack Instances to make it easy to concat the output of parsec back into Text
@@ -38,9 +43,25 @@ infixl 4 <++>
 f <++> g = (\x y -> toText x `T.append` toText y) <$> f <*> g
 
 
+
 -- Site, Story, "Vol/Chp/etc" parse
-volChpParse :: String -> String -> String -> ComicTag
-volChpParse = undefined
+volChpParse :: String -> Maybe String -> String -> ComicTag
+volChpParse site story segment
+    -- There's nothing to parse
+    | null segment = ComicTag (T.pack site) (maybe Nothing (Just . T.pack) story) Nothing Nothing Nothing
+
+    -- Let's get the parsing party on
+    | otherwise = case (breakSegment $ cleanSegment (T.pack segment)) of
+
+        -- TODO: evil bits
+        Left e -> error e
+        Right s-> do
+
+
+
+
+            -- STFU
+            traceShow s $ ComicTag (T.pack site) (maybe Nothing (Just . T.pack) story) Nothing Nothing Nothing
 
 
 
@@ -70,23 +91,41 @@ volChpParse = undefined
 --  - Trim string
 --  - Remove " Read Online"
 --  - TODO: Check if its one that should be discarded? ([Oneshot], [Complete]) ?
-firstPass :: T.Text -> T.Text
-firstPass t =
+cleanSegment :: T.Text -> T.Text
+cleanSegment t =
     let clean = T.strip t
     in case T.stripSuffix (T.pack " Read Online") clean of
         Nothing -> clean
         Just t' -> t'
 
 
+data Keyword = Vol | Chp | Title deriving (Eq, Show)
 -- Second pass
 --  - Break up in 3 part vol, chp, and optional title
---  - TODO: Reconstruct the title if it parses multiples
+--  - Reconstructs the title if there's multiples
+--  - Trims the results
+--  - Runs sanity check to ensure there is at most 1 of each types.
 --
 -- {Vol}[ .]{...} {Chp}[ .]{...} [ :]{Chp Title}{eof}
-secondPass :: ParsecT T.Text u Identity [(Keyword, T.Text)]
-secondPass = many ((,) <$> parseKeyword <*> parseContent) <* eof
+breakSegment :: T.Text -> Either String [(Keyword, T.Text)]
+breakSegment segment = sanityCheck $ either (Left . show) Right $ liftM trim $ liftM merge $ parse chunk "" segment
+   where
+    trim    = map (\(a, b) -> (a, T.strip b))
+    chunk   = many ((,) <$> parseKeyword <*> parseContent) <* eof
 
-data Keyword = Vol | Chp | Title deriving (Eq, Show)
+    -- Merge all segments with Title in it.
+    merge s =
+        let (titles, seg) = DL.partition (\a -> Title == fst a) s
+        in if DL.null titles
+           then seg
+           else (Title, T.intercalate (T.pack ":") (map snd titles)) : seg
+
+    -- Sanity check to make sure there isn't more than 1 of any keyword if it exists
+    sanityCheck (Left e)  = Left e
+    sanityCheck (Right s) = if DL.any (\t -> DL.length (DL.filter (\a -> t == fst a) s) > 1) [Vol, Chp, Title]
+                            then Left $ "More than 1 of a keyword: " ++ show s
+                            else Right s
+
 
 parseKeyword :: ParsecT T.Text u Identity Keyword
 parseKeyword =
