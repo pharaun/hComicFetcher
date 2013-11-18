@@ -43,6 +43,29 @@ volChpParse :: String -> String -> String -> ComicTag
 volChpParse = undefined
 
 
+
+---- Filesystem format - SiteName/StoryName/Volume/Chapter/Page.*
+--data ComicTag = ComicTag
+--    { ctSiteName :: T.Text
+--    , ctStoryName :: Maybe T.Text
+--
+--    , ctVolume :: Maybe UnitTag
+--    , ctChapter :: Maybe UnitTag
+--
+--    , ctFileName :: Maybe T.Text -- TODO: need to find a way to make this mandatory...
+----    , ctPage :: Maybe UnitTag --  TODO: Implement this, for now we just use file name
+--    }
+--    deriving (Show)
+--
+--data UnitTag = UnitTag
+--    { utNumber :: Integer
+--    , utTitle :: Maybe T.Text
+--    }
+--    deriving (Show)
+--
+--data UnitTagType = UnitTagVolume | UnitTagChapter
+
+
 -- First pass
 --  - Trim string
 --  - Remove " Read Online"
@@ -80,33 +103,19 @@ parseContent = (T.pack <$> many space)
 
 -- Third pass
 --  - Parse each segment (vol, chp) in isolation
-thirdPass :: [(Keyword, T.Text)] -> [T.Text]
-thirdPass = mconcat . map pass
-    where
-        pass :: (Keyword, T.Text) -> [T.Text]
-        pass (Title, t) = [t]
-        pass (_, t) = [t]
+--thirdPass :: [(Keyword, T.Text)] -> [PassThree]
+--thirdPass = map pass
+--    where
+--        pass :: (Keyword, T.Text) -> PassThree
+--        pass (Title, t) = PTitle t
+--        pass (_, t) = parseSegment t
 
-volParse :: ParsecT String u Identity [String]
-volParse = undefined
---volParse = do
---    -- {Vol}
---    label <- choice
---        -- TODO: can probably make more efficient by building up from V,Vol,Volume
---        [ try $ string "Volume"
---        , string "Vol"
---        ]
---
---    -- [ .]
---    skipMany $ oneOf " ."
---
---    -- ( {digits} | {text} )
---    ident <- choice
---        [ try digitsParse
---        , (:[]) `fmap` textParse
---        ]
---
---    return $ label: ident
+
+
+
+
+parseSegment :: ParsecT T.Text u Identity ([Digits], T.Text)
+parseSegment = (skipMany $ oneOf " .") *> ((,) <$> option [] digitsParse <*> textParse) <* eof
 
 
 data Digits = RangeDigit Digit Digit
@@ -114,45 +123,38 @@ data Digits = RangeDigit Digit Digit
             deriving (Show)
 
 -- {digits} -> ( {simplified_digit}-{simplified_digit}(,{digits})? | {simplified_digit}(,{digits})? | {single_digit} ){eof}
+--
+-- TODO: this fails for - "1.5v3-5.1v1,10.0v6-22v1,29.Eternity,30"
+-- [ RangeDigit (Digit 1 (Just (DotSubDigit (Just 5) "")) (Just 3))  -- 1.5v3
+--              (Digit 5 (Just (DotSubDigit (Just 1) "")) (Just 1))  -- 5.1v1
+-- , RangeDigit (Digit 10 (Just (DotSubDigit (Just 0) "")) (Just 6)) -- 10.0v6
+--              (Digit 22 Nothing (Just 1))                          -- 22v1
+-- , StandAlone (Digit 29 (Just (DotSubDigit Nothing "Eternity,30")) Nothing) -- 29.Eternity,30 -- Should be 29.Eternity and 30
+-- ]
 digitsParse :: ParsecT T.Text u Identity [Digits]
-digitsParse = do
-    -- Try for simplified digits first
-    digits <- choice
+digitsParse = choice
         [ try (do
-            digit1 <- simplifiedDigit
-            char '-'
-            digit2 <- simplifiedDigit
+            range <- RangeDigit <$> simplifiedDigit <*> (char '-' >> simplifiedDigit)
 
-            keepGoing <- optionMaybe (char ',' >> digitsParse)
-            case keepGoing of
-                Nothing -> return [RangeDigit digit1 digit2]
-                Just k  -> return $ RangeDigit digit1 digit2 : k
+            next <- option [] (char ',' >> digitsParse)
+            return $ [range] ++ next
           )
         , try (do
-            digit <- simplifiedDigit
+            digit <- StandAlone <$> simplifiedDigit
 
-            keepGoing <- optionMaybe (char ',' >> digitsParse)
-            case keepGoing of
-                Nothing -> return [StandAlone digit]
-                Just k  -> return $ StandAlone digit : k
+            next <- option [] (char ',' >> digitsParse)
+            return $ [digit] ++ next
           )
-        , (do
-            digit <- singleDigit
-            return [StandAlone digit]
-          )
+        , (:[]) `fmap` (StandAlone <$> singleDigit)
         ]
-
-    -- TODO: this fails for - "1.5v3-5.1v1,10.0v6-22v1,29.Eternity,30"
-    -- [RangeDigit (Digit 1 (Just (DotSubDigit (Just 5) "")) (Just 3)) (Digit 5 (Just (DotSubDigit (Just 1) "")) (Just 1)),RangeDigit (Digit 10 (Just (DotSubDigit (Just 0) "")) (Just 6)) (Digit 22 Nothing (Just 1)),StandAlone (Digit 29 (Just (DotSubDigit Nothing "Eternity,30")) Nothing)]
-    --
-    return digits
 
 
 data Digit = Digit Integer (Maybe SubDigit) (Maybe Integer)
            deriving (Show)
 
 
---  {single_digit} -> {num} ( {subdigit:[.]}{version} | {subdigit:[.]} | {text} )?
+-- {single_digit} -> {num} ( {subdigit:[.]}{version} | {subdigit:[.]} | {text} )?
+-- TODO: May be able to just merge it into simplifiedDigit
 singleDigit :: ParsecT T.Text u Identity Digit
 singleDigit = do
     digit <- numParse
@@ -278,13 +280,13 @@ textParse = letter <++> many anyChar <* eof
 --  - Chp.0: [Complete]
 
 
-runTests :: IO ()
-runTests = do
-    putStrLn "volParse"
-    print =<< runTestTT (buildParseTests volParse volParseData)
-
-buildParseTests parser testData = TestList $ map (\(src, dst) -> TestLabel (src ++ " -> " ++ dst) (parserTest parser src dst)) testData
-parserTest parser src dst = TestCase (assertEqual "" (Just [dst]) (either (const Nothing) Just (parse parser "(stdin)" src)))
+--runTests :: IO ()
+--runTests = do
+--    putStrLn "volParse"
+--    print =<< runTestTT (buildParseTests volParse volParseData)
+--
+--buildParseTests parser testData = TestList $ map (\(src, dst) -> TestLabel (src ++ " -> " ++ dst) (parserTest parser src dst)) testData
+--parserTest parser src dst = TestCase (assertEqual "" (Just [dst]) (either (const Nothing) Just (parse parser "(stdin)" src)))
 
 volParseData :: [(String, String)]
 volParseData =
@@ -312,28 +314,6 @@ volParseData =
     , ("Vol 4v2", "")
     ]
 
-
-
----- Filesystem format - SiteName/StoryName/Volume/Chapter/Page.*
---data ComicTag = ComicTag
---    { ctSiteName :: T.Text
---    , ctStoryName :: Maybe T.Text
---
---    , ctVolume :: Maybe UnitTag
---    , ctChapter :: Maybe UnitTag
---
---    , ctFileName :: Maybe T.Text -- TODO: need to find a way to make this mandatory...
-----    , ctPage :: Maybe UnitTag --  TODO: Implement this, for now we just use file name
---    }
---    deriving (Show)
---
---data UnitTag = UnitTag
---    { utNumber :: Integer
---    , utTitle :: Maybe T.Text
---    }
---    deriving (Show)
---
---data UnitTagType = UnitTagVolume | UnitTagChapter
 
 
 
