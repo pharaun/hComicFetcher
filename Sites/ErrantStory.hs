@@ -49,7 +49,7 @@ errantStoryPageParse (WebpageReply html VolIndex) = do
     index <- runX $ doc //> indexList
 
     -- TODO: have a pre-process step for processing the parsing results into a useful list for dumping into TBMChans
-    let defaultErrantStory = ComicTag (T.pack "errant_story") Nothing Nothing Nothing Nothing
+    let defaultErrantStory = ComicTag (T.pack "errant_story") Nothing [] Nothing
     let list = buildUrlAndComicTagMapping defaultErrantStory index
 
     -- Dump list of Comic page fetched
@@ -92,12 +92,12 @@ errantStoryPageParse (WebpageReply html VolIndex) = do
             notSameLevel targetLevel (_, (level, _)) = targetLevel /= level
 
     levelToComicTagMapping :: ComicTag -> (Url, (String, String)) -> (Url, ComicTag)
-    levelToComicTagMapping parent (url, ("level-3", name)) =
+    levelToComicTagMapping parent@(ComicTag{ctUnits=ut}) (url, ("level-3", name)) =
         let (chp, chpName) = fixChp name
-        in (url, parent {ctChapter = Just $ UnitTag chp chpName})
-    levelToComicTagMapping parent (url, ("level-2", name)) =
+        in (url, parent {ctUnits = (UnitTag [StandAlone $ Digit chp Nothing Nothing] chpName UnitTagChapter) : ut})
+    levelToComicTagMapping parent@(ComicTag{ctUnits=ut}) (url, ("level-2", name)) =
         let (vol, volName) = fixVol name
-        in (url, parent {ctVolume = Just $ UnitTag vol volName})
+        in (url, parent {ctUnits = (UnitTag [StandAlone $ Digit vol Nothing Nothing] volName UnitTagVolume) : ut})
     levelToComicTagMapping parent (url, ("level-1", name)) = (url, parent {ctStoryName = Just $ T.pack name})
     levelToComicTagMapping parent content = throw $ DebugException "levelToComicTagMapping" ("Parent: " ++ show parent ++ " - Content: " ++ show content)
 
@@ -159,7 +159,7 @@ errantStoryPageParse (WebpageReply html (Page ct)) = do
 
 
 -- Test data
-testTag = ComicTag {ctSiteName = T.pack "errant_story", ctStoryName = Nothing, ctVolume = Nothing, ctChapter = Nothing, ctFileName = Nothing}
+testTag = ComicTag {ctSiteName = T.pack "errant_story", ctStoryName = Nothing, ctUnits = [], ctFileName = Nothing}
 testUrl =  [
     ("http://www.errantstory.com/?cat=129",("level-1","Errant Story")),
         ("http://www.errantstory.com/?cat=59",("level-2","Volume 1")),

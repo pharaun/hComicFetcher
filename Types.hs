@@ -8,6 +8,11 @@ module Types
     , UnitTag(..)
     , UnitTagType(..)
 
+    -- Parsing types
+    , Digits(..)
+    , Digit(..)
+    , SubDigit(..)
+
     , Comic(..)
 
     , DebugException(..)
@@ -56,13 +61,12 @@ import Data.Typeable
 -- MIXED (Common-ness)
 -- 1. Index Chapter/Volume, Sequal Page
 
--- Filesystem format - SiteName/StoryName/Volume/Chapter/Page.*
+---- Filesystem format - SiteName/StoryName/Volume/Chapter/Page.*
 data ComicTag = ComicTag
     { ctSiteName :: T.Text
     , ctStoryName :: Maybe T.Text
 
-    , ctVolume :: Maybe UnitTag
-    , ctChapter :: Maybe UnitTag
+    , ctUnits :: [UnitTag]
 
     , ctFileName :: Maybe T.Text -- TODO: need to find a way to make this mandatory...
 --    , ctPage :: Maybe UnitTag --  TODO: Implement this, for now we just use file name
@@ -70,12 +74,32 @@ data ComicTag = ComicTag
     deriving (Show)
 
 data UnitTag = UnitTag
-    { utNumber :: Integer
+    { utNumber :: [Digits]
     , utTitle :: Maybe T.Text
+    , utType :: UnitTagType
     }
     deriving (Show)
 
-data UnitTagType = UnitTagVolume | UnitTagChapter
+data UnitTagType = UnitTagVolume
+                 | UnitTagChapter
+                 deriving (Show)
+
+
+
+data Digits = RangeDigit Digit Digit
+            | StandAlone Digit
+            deriving (Show)
+
+data Digit = Digit Integer (Maybe SubDigit) (Maybe Integer)
+           deriving (Show)
+
+-- Sub Digits
+data SubDigit = DotSubDigit (Maybe Integer) T.Text
+              deriving (Show)
+
+
+
+
 
 
 -- Data type of the url and any additional info needed
@@ -139,6 +163,10 @@ data Comic t = Comic
     -- TODO: need some good way of convoying/tracking state for things such
     -- as page numbering (page1, page2, page3...)
     }
+
+
+
+
 
 
 -- Debugging exceptions - Where, what

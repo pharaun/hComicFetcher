@@ -43,10 +43,10 @@ f <++> g = (\x y -> toText x `T.append` toText y) <$> f <*> g
 
 
 -- Site, Story, "Vol/Chp/etc" parse
-volChpParse :: String -> Maybe String -> String -> ComicTagV2
+volChpParse :: String -> Maybe String -> String -> ComicTag
 volChpParse site story segment
     -- There's nothing to parse
-    | null segment = ComicTagV2 (T.pack site) (maybe Nothing (Just . T.pack) story) [] Nothing
+    | null segment = ComicTag (T.pack site) (maybe Nothing (Just . T.pack) story) [] Nothing
 
     -- Let's get the parsing party on
     | otherwise = case (breakSegment $ cleanSegment (T.pack segment)) of
@@ -68,8 +68,8 @@ volChpParse site story segment
                             case (parse parseSegment "Chapter" c) of
                                 Left e  -> error $ show e
                                 Right d ->
-                                    let unitTag = UnitTagV2 d title ChpTag
-                                    in ComicTagV2 (T.pack site) (maybe Nothing (Just . T.pack) story) [unitTag] Nothing
+                                    let unitTag = UnitTag d title UnitTagChapter
+                                    in ComicTag (T.pack site) (maybe Nothing (Just . T.pack) story) [unitTag] Nothing
 
                 Just v  ->
                     case (parse parseSegment "Volume" v) of
@@ -77,39 +77,17 @@ volChpParse site story segment
                         Right d ->
                             case chp of
                                 Nothing ->
-                                    let volUnitTag = UnitTagV2 d title VolTag
-                                    in ComicTagV2 (T.pack site) (maybe Nothing (Just . T.pack) story) [volUnitTag] Nothing
+                                    let volUnitTag = UnitTag d title UnitTagVolume
+                                    in ComicTag (T.pack site) (maybe Nothing (Just . T.pack) story) [volUnitTag] Nothing
 
                                 Just c  ->
                                     case (parse parseSegment "Volume" v) of
                                         Left e  -> error $ show e
                                         Right d' ->
-                                            let volUnitTag = UnitTagV2 d Nothing VolTag
-                                                chpUnitTag = UnitTagV2 d' title ChpTag
+                                            let volUnitTag = UnitTag d Nothing UnitTagVolume
+                                                chpUnitTag = UnitTag d' title UnitTagChapter
 
-                                            in ComicTagV2 (T.pack site) (maybe Nothing (Just . T.pack) story) [volUnitTag, chpUnitTag] Nothing
-
-
----- Filesystem format - SiteName/StoryName/Volume/Chapter/Page.*
-data ComicTagV2 = ComicTagV2
-    { ctaSiteName :: T.Text
-    , ctaStoryName :: Maybe T.Text
-
-    , ctaUnits :: [UnitTagV2]
-
-    , ctaFileName :: Maybe T.Text
-    }
-    deriving (Show)
-
-data UnitTagV2 = UnitTagV2
-    { utaNumber :: [Digits]
-    , utaTitle :: Maybe T.Text
-    , utaType :: UnitTagTypeV2
-    }
-    deriving (Show)
-
-data UnitTagTypeV2 = VolTag | ChpTag deriving (Show)
-
+                                            in ComicTag (T.pack site) (maybe Nothing (Just . T.pack) story) [volUnitTag, chpUnitTag] Nothing
 
 -- First pass
 --  - Trim string
@@ -122,8 +100,6 @@ cleanSegment t =
         Nothing -> clean
         Just t' -> t'
 
-
-data Keyword = Vol | Chp | Title deriving (Eq, Show)
 -- Second pass
 --  - Break up in 3 part vol, chp, and optional title
 --  - Reconstructs the title if there's multiples
@@ -150,11 +126,15 @@ breakSegment segment = sanityCheck $ either (Left . show) Right $ liftM trim $ l
                             then Left $ "More than 1 of a keyword: " ++ show s
                             else Right s
 
+-- TODO: may be better to just let the Title fall through and let the Vol or Chp unit tag eat it up
+data Keyword = Vol | Chp | Title deriving (Eq, Show)
 
 parseKeyword :: ParsecT T.Text u Identity Keyword
 parseKeyword =
     (Vol <$ string "Vol") <|>
+    (Vol <$ string "Volume") <|>
     (Chp <$ string "Chp") <|>
+    (Chp <$ string "Chapter") <|>
     (Title <$ string ":") <?>
     "keyword (Vol, Chp, Title)"
 
@@ -170,11 +150,6 @@ parseContent = (T.pack <$> many space)
 --  - Parse each segment (vol, chp) in isolation
 parseSegment :: ParsecT T.Text u Identity [Digits]
 parseSegment = (skipMany $ oneOf " .") *> option [] digitsParse <* eof
-
-
-data Digits = RangeDigit Digit Digit
-            | StandAlone Digit
-            deriving (Show)
 
 -- {digits} -> ( {simplified_digit}-{simplified_digit}(,{digits})? | {simplified_digit}(,{digits})? | {single_digit} ){eof}
 --
@@ -202,11 +177,6 @@ digitsParse = choice
         , (:[]) `fmap` (StandAlone <$> singleDigit)
         ]
 
-
-data Digit = Digit Integer (Maybe SubDigit) (Maybe Integer)
-           deriving (Show)
-
-
 -- {single_digit} -> {num} ( {subdigit:[.]}{version} | {subdigit:[.]} | {text} )?
 -- TODO: May be able to just merge it into simplifiedDigit
 singleDigit :: ParsecT T.Text u Identity Digit
@@ -223,10 +193,6 @@ singleDigit = do
 simplifiedDigit :: ParsecT T.Text u Identity Digit
 simplifiedDigit = Digit <$> numParse <*> optionMaybe simplifiedSubDigit <*> optionMaybe version
 
-
--- Sub Digits
-data SubDigit = DotSubDigit (Maybe Integer) T.Text
-              deriving (Show)
 
 -- {simplified_subdigit} -> [.]{num}
 --  TODO: have this fail? if there's nothing after the dot

@@ -23,6 +23,9 @@ import Sites.Util
 -- Tagsoup
 import Text.XML.HXT.TagSoup
 
+-- Safehead
+import Safe
+
 
 data Tag = Index              -- Volume/Chapter Index page
          | FirstPage ComicTag -- First page (fetch the list of pages)
@@ -53,8 +56,7 @@ batotoPageParse (WebpageReply html Index) = do
     mapM_ print volChpPage
 
     -- Parse the Vol/Chp
-    -- TODO: SafeHead
-    let next = map (\(a, b) -> (a, volChpParse "batoto" (head story) b)) volChpPage
+    let next = map (\(a, b) -> (a, volChpParse "batoto" (headMay story) b)) volChpPage
     return $ map (\(a, b) -> Webpage a (FirstPage b)) next
 
    where

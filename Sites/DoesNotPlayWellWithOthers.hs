@@ -54,4 +54,4 @@ dnpwwoPageParse (WebpageReply html _) = do
    where
     nextPage = hasName "a" >>> hasAttrValue "class" (isInfixOf "navi-next") >>> hasAttr "href" >>> getAttrValue "href"
     comic = hasAttrValue "id" (== "comic") >>> hasName "div" //> hasName "img" >>> hasAttr "src" >>> getAttrValue "src"
-    comicFileName url = ComicTag (T.pack "does_not_play_well_with_others") Nothing Nothing Nothing (Just $ last $ decodePathSegments $ US.fromString url)
+    comicFileName url = ComicTag (T.pack "does_not_play_well_with_others") Nothing [] (Just $ last $ decodePathSegments $ US.fromString url)
