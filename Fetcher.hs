@@ -84,7 +84,7 @@ batotoCookie = CH.Cookie
 
 
 
-
+data UnitTagType = UnitTagVolume | UnitTagChapter
 
 -- TODO: Find a better home for this
 comicTagToFilePath :: ComicTag -> FPO.FilePath
@@ -97,42 +97,38 @@ comicTagToFilePath ct = DL.foldl (</>) (FPO.decodeString "./") (DL.filter (not .
         Nothing -> FP.empty
         Just x  -> FPO.fromText x
 
-    -- Unit Tag
-    , if DL.null $ ctUnits ct
-      then FP.empty
-      else unitTagToFilePath $ ctUnits ct
+    -- Volume
+    , case ctVolume ct of
+        Nothing -> FP.empty
+        Just x  -> unitTagToFilePath UnitTagVolume x
+
+    -- Chapter
+    , case ctChapter ct of
+        Nothing -> FP.empty
+        Just x  -> unitTagToFilePath UnitTagChapter x
 
     -- TODO: this fromJust is bad news
     , FPO.fromText (fromJust $ ctFileName ct)
     ])
 
     where
-        unitTagToFilePath :: [UnitTag] -> FPO.FilePath
-        unitTagToFilePath = undefined
+        unitTagToFilePath :: UnitTagType -> UnitTag -> FPO.FilePath
+        unitTagToFilePath UnitTagVolume ut  = unitTagString (T.pack "Volume ") ut
+        unitTagToFilePath UnitTagChapter ut = unitTagString (T.pack "Chapter ") ut
 
---        unitTagToFilePath :: UnitTagType -> UnitTag -> FPO.FilePath
---        unitTagToFilePath UnitTagVolume ut  = unitTagString (T.pack "Volume ") ut
---        unitTagToFilePath UnitTagChapter ut = unitTagString (T.pack "Chapter ") ut
---
---        -- TODO: need to add zero padding
---        unitTagString :: T.Text -> UnitTag -> FPO.FilePath
---        unitTagString s UnitTag{utNumber=issue, utTitle=name} = FPO.fromText (s `T.append` T.pack (show issue) `T.append` (
---            case name of
---                Nothing -> T.empty
---                Just x  -> T.pack ": " `T.append` x
---            ))
---
+        -- TODO: need to add zero padding
+        unitTagString :: T.Text -> UnitTag -> FPO.FilePath
+        unitTagString s UnitTag{utNumber=issue, utTitle=name} = FPO.fromText (s `T.append` T.pack (show issue) `T.append` (
+            case name of
+                Nothing -> T.empty
+                Just x  -> T.pack ": " `T.append` x
+            ))
 
 --data UnitTag = UnitTag
 --    { utNumber :: [Digits]
 --    , utTitle :: Maybe T.Text
---    , utType :: UnitTagType
 --    }
 --    deriving (Show)
---
---data UnitTagType = UnitTagVolume
---                 | UnitTagChapter
---                 deriving (Show)
 --
 --data Digits = RangeDigit Digit Digit
 --            | StandAlone Digit
@@ -145,6 +141,7 @@ comicTagToFilePath ct = DL.foldl (</>) (FPO.decodeString "./") (DL.filter (not .
 --data SubDigit = DotSubDigit (Maybe Integer) T.Text
 --              deriving (Show)
 --
+
 
 
 

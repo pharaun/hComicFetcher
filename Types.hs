@@ -6,7 +6,6 @@ module Types
 
     , ComicTag(..)
     , UnitTag(..)
-    , UnitTagType(..)
 
     -- Parsing types
     , Digits(..)
@@ -66,7 +65,8 @@ data ComicTag = ComicTag
     { ctSiteName :: T.Text
     , ctStoryName :: Maybe T.Text
 
-    , ctUnits :: [UnitTag]
+    , ctVolume :: Maybe UnitTag
+    , ctChapter :: Maybe UnitTag
 
     , ctFileName :: Maybe T.Text -- TODO: need to find a way to make this mandatory...
 --    , ctPage :: Maybe UnitTag --  TODO: Implement this, for now we just use file name
@@ -76,13 +76,8 @@ data ComicTag = ComicTag
 data UnitTag = UnitTag
     { utNumber :: [Digits]
     , utTitle :: Maybe T.Text
-    , utType :: UnitTagType
     }
     deriving (Show)
-
-data UnitTagType = UnitTagVolume
-                 | UnitTagChapter
-                 deriving (Show)
 
 
 

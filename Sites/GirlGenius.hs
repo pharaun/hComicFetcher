@@ -62,7 +62,7 @@ girlGeniusPageParse (WebpageReply html _) = do
         >>> getAttrValue "src"
         >>. arr (filter (isPrefixOf "http"))
 
-    comicFileName vol url = ComicTag (T.pack "girl_genius") Nothing [UnitTag [StandAlone $ Digit (girlGeniusVol vol) Nothing Nothing] Nothing UnitTagChapter] (Just $ last $ decodePathSegments $ US.fromString url)
+    comicFileName vol url = ComicTag (T.pack "girl_genius") Nothing (Just $ UnitTag [StandAlone $ Digit (girlGeniusVol vol) Nothing Nothing] Nothing) Nothing (Just $ last $ decodePathSegments $ US.fromString url)
 
     -- TODO: this returns a single string (cuz its concating all of this), we worked around this but this is very much non-ideal
     --  For workaround see girlGeniusVol

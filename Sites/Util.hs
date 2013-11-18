@@ -46,7 +46,7 @@ f <++> g = (\x y -> toText x `T.append` toText y) <$> f <*> g
 volChpParse :: String -> Maybe String -> String -> ComicTag
 volChpParse site story segment
     -- There's nothing to parse
-    | null segment = ComicTag (T.pack site) (maybe Nothing (Just . T.pack) story) [] Nothing
+    | null segment = ComicTag (T.pack site) (maybe Nothing (Just . T.pack) story) Nothing Nothing Nothing
 
     -- Let's get the parsing party on
     | otherwise = case (breakSegment $ cleanSegment (T.pack segment)) of
@@ -68,8 +68,8 @@ volChpParse site story segment
                             case (parse parseSegment "Chapter" c) of
                                 Left e  -> error $ show e
                                 Right d ->
-                                    let unitTag = UnitTag d title UnitTagChapter
-                                    in ComicTag (T.pack site) (maybe Nothing (Just . T.pack) story) [unitTag] Nothing
+                                    let chp = UnitTag d title
+                                    in ComicTag (T.pack site) (maybe Nothing (Just . T.pack) story) Nothing (Just chp) Nothing
 
                 Just v  ->
                     case (parse parseSegment "Volume" v) of
@@ -77,17 +77,17 @@ volChpParse site story segment
                         Right d ->
                             case chp of
                                 Nothing ->
-                                    let volUnitTag = UnitTag d title UnitTagVolume
-                                    in ComicTag (T.pack site) (maybe Nothing (Just . T.pack) story) [volUnitTag] Nothing
+                                    let vol = UnitTag d title
+                                    in ComicTag (T.pack site) (maybe Nothing (Just . T.pack) story) (Just vol) Nothing Nothing
 
                                 Just c  ->
                                     case (parse parseSegment "Volume" v) of
                                         Left e  -> error $ show e
                                         Right d' ->
-                                            let volUnitTag = UnitTag d Nothing UnitTagVolume
-                                                chpUnitTag = UnitTag d' title UnitTagChapter
+                                            let vol = UnitTag d Nothing
+                                                chp = UnitTag d' title
 
-                                            in ComicTag (T.pack site) (maybe Nothing (Just . T.pack) story) [volUnitTag, chpUnitTag] Nothing
+                                            in ComicTag (T.pack site) (maybe Nothing (Just . T.pack) story) (Just vol) (Just chp) Nothing
 
 -- First pass
 --  - Trim string
