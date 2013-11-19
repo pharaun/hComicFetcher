@@ -85,7 +85,8 @@ data Digits = RangeDigit Digit Digit
             | StandAlone Digit
             deriving (Show)
 
-data Digit = Digit Integer (Maybe SubDigit) (Maybe Integer)
+-- Int: 29 subdigit: .9 Int: v1 Text: a -> 29.9v1a
+data Digit = Digit Integer (Maybe SubDigit) (Maybe Integer) (Maybe T.Text)
            deriving (Show)
 
 -- Sub Digits

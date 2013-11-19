@@ -53,7 +53,7 @@ gunnerkrigCourtPageParse (WebpageReply html _) = do
     -- TODO: this can probably be made more specific/nicer
     comicFileName filepath url =
         let (chp, name) = fixChp filepath
-        in ComicTag (T.pack "gunnerkrigg_court") Nothing (Just $ UnitTag [StandAlone $ Digit chp Nothing Nothing] name) Nothing (Just $ last $ decodePathSegments $ US.fromString url)
+        in ComicTag (T.pack "gunnerkrigg_court") Nothing (Just $ UnitTag [StandAlone $ Digit chp Nothing Nothing Nothing] name) Nothing (Just $ last $ decodePathSegments $ US.fromString url)
 
     chapterPage doc = listA (doc
         //> hasAttrValue "class" (== "chapters")

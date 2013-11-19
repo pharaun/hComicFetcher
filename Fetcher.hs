@@ -48,6 +48,8 @@ import Data.Time.Calendar
 -- Local types
 import Types
 
+-- Debugging
+import Debug.Trace
 
 
 -- Seconds to wait between each request to this site
@@ -88,7 +90,7 @@ data UnitTagType = UnitTagVolume | UnitTagChapter
 
 -- TODO: Find a better home for this
 comicTagToFilePath :: ComicTag -> FPO.FilePath
-comicTagToFilePath ct = DL.foldl (</>) (FPO.decodeString "./") (DL.filter (not . FP.null)
+comicTagToFilePath ct = traceShow ct $ DL.foldl (</>) (FPO.decodeString "./") (DL.filter (not . FP.null)
     -- Site Name
     [ FPO.fromText (ctSiteName ct)
 
@@ -132,10 +134,14 @@ comicTagToFilePath ct = DL.foldl (</>) (FPO.decodeString "./") (DL.filter (not .
         formatDigits (StandAlone a)   = formatDigit a
 
         formatDigit :: Digit -> T.Text
-        formatDigit (Digit i (Just s) (Just v)) = T.concat [zeroPad i, formatSubDigit s, formatVersion v]
-        formatDigit (Digit i (Just s) Nothing)  = T.concat [zeroPad i, formatSubDigit s]
-        formatDigit (Digit i Nothing (Just v))  = T.concat [zeroPad i, formatVersion v]
-        formatDigit (Digit i Nothing Nothing)   = T.concat [zeroPad i]
+        formatDigit (Digit i (Just s) (Just v) (Just t)) = T.concat [zeroPad i, formatSubDigit s, formatVersion v, t]
+        formatDigit (Digit i (Just s) (Just v) Nothing)  = T.concat [zeroPad i, formatSubDigit s, formatVersion v]
+        formatDigit (Digit i (Just s) Nothing (Just t))  = T.concat [zeroPad i, formatSubDigit s, t]
+        formatDigit (Digit i (Just s) Nothing Nothing)   = T.concat [zeroPad i, formatSubDigit s]
+        formatDigit (Digit i Nothing (Just v) (Just t))  = T.concat [zeroPad i, formatVersion v, t]
+        formatDigit (Digit i Nothing (Just v) Nothing)   = T.concat [zeroPad i, formatVersion v]
+        formatDigit (Digit i Nothing Nothing (Just t))   = T.concat [zeroPad i, t]
+        formatDigit (Digit i Nothing Nothing Nothing)    = T.concat [zeroPad i]
 
         -- TODO: Formatting is a bit debatable but its directly concat
         formatSubDigit :: SubDigit -> T.Text

@@ -22,6 +22,10 @@ import Control.Monad
 -- Testing
 import Test.HUnit
 
+-- TODO: Quickcheck this, we have a pretty printer so it should be quite
+-- doable to quickcheck this
+import Debug.Trace
+
 -- Local Imports
 import Types
 
@@ -41,7 +45,6 @@ infixl 4 <++>
 f <++> g = (\x y -> toText x `T.append` toText y) <$> f <*> g
 
 
-
 -- Site, Story, "Vol/Chp/etc" parse
 volChpParse :: String -> Maybe String -> String -> ComicTag
 volChpParse site story segment
@@ -49,7 +52,7 @@ volChpParse site story segment
     | null segment = ComicTag (T.pack site) (maybe Nothing (Just . T.pack) story) Nothing Nothing Nothing
 
     -- Let's get the parsing party on
-    | otherwise = case (breakSegment $ cleanSegment (T.pack segment)) of
+    | otherwise = case traceShow segment (breakSegment $ cleanSegment (T.pack segment)) of
 
         -- TODO: evil bits
         Left e  -> error e
@@ -64,30 +67,30 @@ volChpParse site story segment
                 Nothing ->
                     case chp of
                         Nothing -> error "Missing both Volume and Chapter"
-                        Just c  ->
-                            case (parse parseSegment "Chapter" c) of
-                                Left e  -> error $ show e
-                                Right d ->
-                                    let chp = UnitTag d title
-                                    in ComicTag (T.pack site) (maybe Nothing (Just . T.pack) story) Nothing (Just chp) Nothing
+                        Just c1 ->
+                            case (parse parseSegment "Chapter" c1) of
+                                Left e   -> error $ show e
+                                Right c2 ->
+                                    let c3 = UnitTag c2 title
+                                    in ComicTag (T.pack site) (maybe Nothing (Just . T.pack) story) Nothing (Just c3) Nothing
 
-                Just v  ->
-                    case (parse parseSegment "Volume" v) of
-                        Left e  -> error $ show e
-                        Right d ->
+                Just v1  ->
+                    case (parse parseSegment "Volume" v1) of
+                        Left e   -> error $ show e
+                        Right v2 ->
                             case chp of
                                 Nothing ->
-                                    let vol = UnitTag d title
-                                    in ComicTag (T.pack site) (maybe Nothing (Just . T.pack) story) (Just vol) Nothing Nothing
+                                    let v3 = UnitTag v2 title
+                                    in ComicTag (T.pack site) (maybe Nothing (Just . T.pack) story) (Just v3) Nothing Nothing
 
-                                Just c  ->
-                                    case (parse parseSegment "Volume" v) of
-                                        Left e  -> error $ show e
-                                        Right d' ->
-                                            let vol = UnitTag d Nothing
-                                                chp = UnitTag d' title
+                                Just c4 ->
+                                    case (parse parseSegment "Chapter" c4) of
+                                        Left e   -> error $ show e
+                                        Right c5 ->
+                                            let v4 = UnitTag v2 Nothing
+                                                c6 = UnitTag c5 title
 
-                                            in ComicTag (T.pack site) (maybe Nothing (Just . T.pack) story) (Just vol) (Just chp) Nothing
+                                            in ComicTag (T.pack site) (maybe Nothing (Just . T.pack) story) (Just v4) (Just c6) Nothing
 
 -- First pass
 --  - Trim string
@@ -133,14 +136,16 @@ parseKeyword :: ParsecT T.Text u Identity Keyword
 parseKeyword =
     (Vol <$ string "Vol") <|>
     (Vol <$ string "Volume") <|>
+    (Chp <$ string "Ch") <|>
     (Chp <$ string "Chp") <|>
     (Chp <$ string "Chapter") <|>
     (Title <$ string ":") <?>
     "keyword (Vol, Chp, Title)"
 
+-- TODO: a Chp/Vol expects a space or a dot after
 parseContent :: ParsecT T.Text u Identity T.Text
 parseContent = (T.pack <$> many space)
-          <++> ((T.empty <$ lookAhead (try parseKeyword))
+          <++> ((T.empty <$ lookAhead (try (parseKeyword <* oneOf " .")))
            <|> option T.empty (T.pack <$> many1 (noneOf " \t:") <++> parseContent))
 
 
@@ -182,17 +187,16 @@ digitsParse = choice
 singleDigit :: ParsecT T.Text u Identity Digit
 singleDigit = do
     digit <- numParse
---  TODO: Fix this so it will check that its not a version first
+    -- TODO: Fix this so it will check that its not a version first
     subdigit <- optionMaybe dotSubDigit
     version <- optionMaybe version
 
     -- TODO: extend this to deal with {text} case
-    return $ Digit digit subdigit version
+    return $ Digit digit subdigit version Nothing
 
--- {simplified_digit} -> {num} ( {simplified_subdigit}?{version}? )
+-- {simplified_digit} -> {num} ( {simplified_subdigit}?{version}?{letter}? )
 simplifiedDigit :: ParsecT T.Text u Identity Digit
-simplifiedDigit = Digit <$> numParse <*> optionMaybe simplifiedSubDigit <*> optionMaybe version
-
+simplifiedDigit = Digit <$> numParse <*> optionMaybe simplifiedSubDigit <*> optionMaybe version <*> optionMaybe letterParse
 
 -- {simplified_subdigit} -> [.]{num}
 --  TODO: have this fail? if there's nothing after the dot
@@ -222,6 +226,9 @@ numParse = liftA read (many1 digit)
 textParse :: ParsecT T.Text u Identity T.Text
 textParse = letter <++> many anyChar <* eof
 
+-- {letter} -> [A-z0-9]*
+letterParse :: ParsecT T.Text u Identity T.Text
+letterParse = letter <++> many alphaNum <* eof
 
 
 
