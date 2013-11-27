@@ -19,6 +19,8 @@ module Sites.Util
     , simplifiedDigit
     , simplifiedSubDigit
     , dotSubDigit
+
+    , textExceptVersionParse
     ) where
 
 import qualified Data.List as DL
@@ -247,10 +249,13 @@ textParse = letter <++> many anyChar <* eof
 -- {textExceptVersion} -> [A-z][A-z0-9 ]*
 -- TODO: maybe expand the acceptable characters
 textExceptVersionParse :: ParsecT T.Text u Identity T.Text
-textExceptVersionParse =
-            (T.empty <$ lookAhead (try version))
-        <|>
-            option T.empty ((letter <++> many anyChar) <++> parseContent)
+textExceptVersionParse = do
+    text <- optionMaybe $ try $ manyTill anyChar (try version)
+
+    case text of
+        -- TODO: Need to make error less confusing (expecting "v") for empty string??
+        Nothing -> textParse
+        Just t  -> return $ T.pack t
 
 -- {letter} -> [A-z0-9]*
 letterParse :: ParsecT T.Text u Identity T.Text

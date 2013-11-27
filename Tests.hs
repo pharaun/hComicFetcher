@@ -73,6 +73,7 @@ checkSimplifiedSubDigit ast =
                     else False
         Right a -> (empty ast) == a
 
+-- FAILS: DotSubDigit (Just 8) "v83xOxe"
 checkDotSubDigit ast =
     case (parse dotSubDigit "" (formatSubDigit ast)) of
         Left _  ->  if isEmpty ast
@@ -80,12 +81,21 @@ checkDotSubDigit ast =
                     else False
         Right a -> ast == a
 
+-- FAILS: Digit 3 (Just (DotSubDigit (Just 12) "JrZQT")) (Just 5) Nothing
 checkSingleDigit ast =
     case (parse singleDigit "" (formatDigit $ emptyD ast)) of
         Left _  ->  if (isEmptyD $ emptyD ast)
                     then True
                     else False
         Right a -> (emptyD ast) == a
+
+-- FAILS: Digit 1 (Just (DotSubDigit (Just 2) "i33rOJU8")) Nothing (Just "D6h8rBNL2V")
+checkSimplifiedDigit ast =
+    case (parse singleDigit "" (formatDigit $ emptySD ast)) of
+        Left _  ->  if (isEmptyD $ emptySD ast)
+                    then True
+                    else False
+        Right a -> (emptySD ast) == a
 
 
 
@@ -104,6 +114,11 @@ emptyD :: Digit -> Digit
 emptyD (Digit a Nothing c _) = Digit a Nothing c Nothing
 emptyD (Digit a (Just (DotSubDigit Nothing _)) c _) = Digit a Nothing c Nothing
 emptyD (Digit a (Just b@(DotSubDigit (Just _) _)) c _) = Digit a (Just $ empty b) c Nothing
+
+-- *** Failed! Exception: 'Tests.hs:(116,1)-(117,86): Non-exhaustive patterns in function emptySD' (after 1 test):
+emptySD :: Digit -> Digit
+emptySD (Digit a (Just (DotSubDigit Nothing _)) c d) = Digit a Nothing c d
+emptySD (Digit a (Just b@(DotSubDigit (Just _) _)) c d) = Digit a (Just $ empty b) c d
 
 isEmptyD :: Digit -> Bool
 isEmptyD (Digit _ _ _ Nothing) = True
