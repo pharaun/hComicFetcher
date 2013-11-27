@@ -87,11 +87,11 @@ data Digits = RangeDigit Digit Digit
 
 -- Int: 29 subdigit: .9 Int: v1 Text: a -> 29.9v1a
 data Digit = Digit Integer (Maybe SubDigit) (Maybe Integer) (Maybe T.Text)
-           deriving (Show)
+           deriving (Show, Eq)
 
 -- Sub Digits
 data SubDigit = DotSubDigit (Maybe Integer) T.Text
-              deriving (Show)
+              deriving (Show, Eq)
 
 
 

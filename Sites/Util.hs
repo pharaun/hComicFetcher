@@ -4,6 +4,21 @@ module Sites.Util
     , fixChp
     , fixVol
     , wordToNumber
+
+    -- Testing
+    , cleanSegment
+    , breakSegment
+
+    , parseKeyword
+    , Keyword(..)
+
+    , parseContent
+    , parseSegment
+    , digitsParse
+    , singleDigit
+    , simplifiedDigit
+    , simplifiedSubDigit
+    , dotSubDigit
     ) where
 
 import qualified Data.List as DL
@@ -210,7 +225,9 @@ simplifiedSubDigit = char '.' >> (DotSubDigit <$> (Just <$> numParse) <*> (pure 
 --  TODO: Fix this so it will check that its not a version first
 --  TODO: have this fail? if there's nothing after the dot
 dotSubDigit :: ParsecT T.Text u Identity SubDigit
-dotSubDigit = char '.' >> (DotSubDigit <$> optionMaybe numParse <*> option T.empty textParse)
+dotSubDigit = char '.' >> (DotSubDigit <$> optionMaybe numParse <*> option T.empty textExceptVersionParse)
+
+
 
 
 -- {version} -> v{num}
@@ -223,8 +240,17 @@ numParse = liftA read (many1 digit)
 
 -- {text} -> [A-z][A-z0-9 ]*{eof}
 -- TODO: maybe make this optional to make parsing easier
+-- TODO: maybe expand the acceptable characters
 textParse :: ParsecT T.Text u Identity T.Text
 textParse = letter <++> many anyChar <* eof
+
+-- {textExceptVersion} -> [A-z][A-z0-9 ]*
+-- TODO: maybe expand the acceptable characters
+textExceptVersionParse :: ParsecT T.Text u Identity T.Text
+textExceptVersionParse =
+            (T.empty <$ lookAhead (try version))
+        <|>
+            option T.empty ((letter <++> many anyChar) <++> parseContent)
 
 -- {letter} -> [A-z0-9]*
 letterParse :: ParsecT T.Text u Identity T.Text

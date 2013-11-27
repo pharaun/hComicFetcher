@@ -15,7 +15,7 @@ executable hComicFetcher
   main-is: main.hs
 
   build-depends:
-    base ==4.6.*,
+    base ==4.5.*,
     bytestring,
     conduit,
     cryptohash,
@@ -35,4 +35,9 @@ executable hComicFetcher
     text,
     time,
     transformers,
-    utf8-string
+    utf8-string,
+    HUnit,
+    parsec,
+    safe,
+    QuickCheck,
+    HUnit
