@@ -83,7 +83,7 @@ data UnitTag = UnitTag
 
 data Digits = RangeDigit Digit Digit
             | StandAlone Digit
-            deriving (Show)
+            deriving (Show, Eq)
 
 -- Int: 29 subdigit: .9 Int: v1 Text: a -> 29.9v1a
 data Digit = Digit Integer (Maybe SubDigit) (Maybe Integer) (Maybe T.Text)

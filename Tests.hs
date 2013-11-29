@@ -58,12 +58,23 @@ instance Arbitrary Digit where
         Positive ver <- arbitrary
         verMaybe     <- elements [ Just ver, Nothing ]
 
-        idx          <- choose (0, 10)
+        idx          <- choose (1, 10)
         ending       <- T.pack <$> letterThenLetterOrDigit idx
         endingMaybe  <- elements [ Just ending, Nothing ]
 
         return $ Digit pos subMaybe verMaybe endingMaybe
 
+
+instance Arbitrary Digits where
+    arbitrary = do
+        first <- arbitrary
+
+        second <- arbitrary
+        secondMaybe <- elements [ Just second, Nothing ]
+
+        return $ case secondMaybe of
+            Nothing -> StandAlone first
+            Just  _ -> RangeDigit first second
 
 
 -- Checks
@@ -81,7 +92,6 @@ checkDotSubDigit ast =
                     else False
         Right a -> ast == a
 
--- FAILS: Digit 4 (Just (DotSubDigit (Just 4) "a9")) (Just 4) Nothing
 checkSingleDigit ast =
     case (parse singleDigit "" (formatDigit $ emptyD ast)) of
         Left _  ->  if (isEmptyD $ emptyD ast)
@@ -89,7 +99,6 @@ checkSingleDigit ast =
                     else False
         Right a -> (emptyD ast) == a
 
--- FAILS: Digit 1 (Just (DotSubDigit (Just 2) "i33rOJU8")) Nothing (Just "D6h8rBNL2V")
 checkSimplifiedDigit ast =
     case (parse simplifiedDigit "" (formatDigit $ emptySD ast)) of
         Left _  ->  if (isEmptyD $ emptySD ast)
@@ -97,7 +106,10 @@ checkSimplifiedDigit ast =
                     else False
         Right a -> (emptySD ast) == a
 
-
+checkSingleDigits ast =
+    case (parse digitsParse "" (formatDigits ast)) of
+        Left _  ->  False
+        Right a -> [ast] == a
 
 
 
