@@ -1,6 +1,7 @@
 import Control.Applicative ((<$>), (<*>))
 import Control.Monad
 import qualified Data.Text as T
+import qualified Data.List as DL
 import Data.String (fromString)
 import Text.Parsec (parse)
 import Text.Parsec.Text
@@ -32,7 +33,7 @@ letterThenLetterOrDigit n
     | otherwise = do
         l <- letter
         r <- replicateM (n - 1) letterOrDigit
-        return $ l:r
+        return $ removeVersion $ l:r
 
 instance Arbitrary T.Text where
     arbitrary = fromString <$> (arbitrary :: Gen String)
@@ -73,7 +74,6 @@ checkSimplifiedSubDigit ast =
                     else False
         Right a -> (empty ast) == a
 
--- FAILS: DotSubDigit (Just 8) "v83xOxe"
 checkDotSubDigit ast =
     case (parse dotSubDigit "" (formatSubDigit ast)) of
         Left _  ->  if isEmpty ast
@@ -81,7 +81,7 @@ checkDotSubDigit ast =
                     else False
         Right a -> ast == a
 
--- FAILS: Digit 3 (Just (DotSubDigit (Just 12) "JrZQT")) (Just 5) Nothing
+-- FAILS: Digit 4 (Just (DotSubDigit (Just 4) "a9")) (Just 4) Nothing
 checkSingleDigit ast =
     case (parse singleDigit "" (formatDigit $ emptyD ast)) of
         Left _  ->  if (isEmptyD $ emptyD ast)
@@ -91,7 +91,7 @@ checkSingleDigit ast =
 
 -- FAILS: Digit 1 (Just (DotSubDigit (Just 2) "i33rOJU8")) Nothing (Just "D6h8rBNL2V")
 checkSimplifiedDigit ast =
-    case (parse singleDigit "" (formatDigit $ emptySD ast)) of
+    case (parse simplifiedDigit "" (formatDigit $ emptySD ast)) of
         Left _  ->  if (isEmptyD $ emptySD ast)
                     then True
                     else False
@@ -115,11 +115,22 @@ emptyD (Digit a Nothing c _) = Digit a Nothing c Nothing
 emptyD (Digit a (Just (DotSubDigit Nothing _)) c _) = Digit a Nothing c Nothing
 emptyD (Digit a (Just b@(DotSubDigit (Just _) _)) c _) = Digit a (Just $ empty b) c Nothing
 
--- *** Failed! Exception: 'Tests.hs:(116,1)-(117,86): Non-exhaustive patterns in function emptySD' (after 1 test):
 emptySD :: Digit -> Digit
 emptySD (Digit a (Just (DotSubDigit Nothing _)) c d) = Digit a Nothing c d
 emptySD (Digit a (Just b@(DotSubDigit (Just _) _)) c d) = Digit a (Just $ empty b) c d
+emptySD (Digit a Nothing c d) = Digit a Nothing c d
+
 
 isEmptyD :: Digit -> Bool
 isEmptyD (Digit _ _ _ Nothing) = True
 isEmptyD _ = False
+
+-- Cheap lazy way of replacing all v[0-9]
+removeVersion :: String -> String
+removeVersion s = T.unpack $ DL.foldl cleaner (T.pack s) cleanerList
+    where
+        cleaner :: T.Text -> T.Text -> T.Text
+        cleaner a b = T.replace b (T.pack "a9") b
+
+        cleanerList :: [T.Text]
+        cleanerList = map T.pack $ DL.concatMap (\a -> DL.transpose [DL.replicate 10 a, "0123456789"]) "Vv"

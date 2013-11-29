@@ -250,7 +250,7 @@ textParse = letter <++> many anyChar <* eof
 -- TODO: maybe expand the acceptable characters
 textExceptVersionParse :: ParsecT T.Text u Identity T.Text
 textExceptVersionParse = do
-    text <- optionMaybe $ try $ manyTill anyChar (try version)
+    text <- optionMaybe $ try $ manyTillPutBack anyChar (try version)
 
     case text of
         -- TODO: Need to make error less confusing (expecting "v") for empty string??
@@ -260,6 +260,14 @@ textExceptVersionParse = do
 -- {letter} -> [A-z0-9]*
 letterParse :: ParsecT T.Text u Identity T.Text
 letterParse = letter <++> many alphaNum <* eof
+
+-- This will attempt to match ending but then put it back into the stream
+manyTillPutBack :: (Stream s m t) => ParsecT s u m a -> ParsecT s u m end -> ParsecT s u m [a]
+manyTillPutBack p end = scan
+   where
+    scan =  do{ lookAhead end; return [] }
+        <|>
+            do{ x <- p; xs <- scan; return (x:xs) }
 
 
 
