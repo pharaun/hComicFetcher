@@ -107,9 +107,17 @@ checkSimplifiedDigit ast =
         Right a -> (emptySD ast) == a
 
 checkSingleDigits ast =
-    case (parse digitsParse "" (formatDigits ast)) of
+    case (parse digitsParse "" (formatDigits $ cleanRangeDigit ast)) of
         Left _  ->  False
-        Right a -> [ast] == a
+        Right a -> [cleanRangeDigit ast] == a
+
+
+-- TODO: Need to treat the last element specially but for now this will do
+checkListDigits (NonEmpty ast) =
+    case (parse digitsParse "" (formatListDigits $ map strictCleanRangeDigit ast)) of
+        Left _  ->  False
+        Right a -> (map strictCleanRangeDigit ast) == a
+
 
 
 
@@ -146,3 +154,31 @@ removeVersion s = T.unpack $ DL.foldl cleaner (T.pack s) cleanerList
 
         cleanerList :: [T.Text]
         cleanerList = map T.pack $ DL.concatMap (\a -> DL.transpose [DL.replicate 10 a, "0123456789"]) "Vv"
+
+
+cleanRangeDigit :: Digits -> Digits
+cleanRangeDigit (StandAlone a)   = StandAlone $ secondDigit a
+cleanRangeDigit (RangeDigit a b) = RangeDigit (firstDigit a) (secondDigit b)
+
+firstDigit :: Digit -> Digit
+firstDigit (Digit a Nothing b _) = Digit a Nothing b Nothing
+firstDigit (Digit a (Just (DotSubDigit Nothing _)) b _) = Digit a Nothing b Nothing
+firstDigit (Digit a (Just (DotSubDigit (Just c) _)) b _) = Digit a (Just $ DotSubDigit (Just c) T.empty) b Nothing
+
+secondDigit :: Digit -> Digit
+secondDigit (Digit a Nothing b c) = Digit a Nothing b c
+secondDigit (Digit a (Just (DotSubDigit Nothing _)) b c) = Digit a Nothing b c
+secondDigit (Digit a (Just (DotSubDigit (Just d) _)) b c) = Digit a (Just $ DotSubDigit (Just d) T.empty) b c
+
+strictCleanRangeDigit :: Digits -> Digits
+strictCleanRangeDigit (StandAlone a)   = StandAlone $ firstDigit a
+strictCleanRangeDigit (RangeDigit a b) = RangeDigit (firstDigit a) (firstDigit b)
+
+
+---- Int: 29 subdigit: .9 Int: v1 Text: a -> 29.9v1a
+--data Digit = Digit Integer (Maybe SubDigit) (Maybe Integer) (Maybe T.Text)
+--           deriving (Show, Eq)
+--
+---- Sub Digits
+--data SubDigit = DotSubDigit (Maybe Integer) T.Text
+--              deriving (Show, Eq)
