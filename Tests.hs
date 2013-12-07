@@ -77,6 +77,21 @@ instance Arbitrary Digits where
             Just  _ -> RangeDigit first second
 
 
+-- Quickcheck main/options
+main =
+    mapM_ (quickCheckWith options)
+        [ property $ checkSimplifiedSubDigit
+        , property $ checkDotSubDigit
+        , property $ checkSingleDigit
+        , property $ checkSimplifiedDigit
+        , property $ checkSingleDigits
+        , property $ checkListDigits
+        ]
+    where
+        options = stdArgs { maxSuccess = 1000 }
+
+
+
 -- Checks
 checkSimplifiedSubDigit ast =
     case (parse simplifiedSubDigit "" (formatSubDigit $ empty $ ast)) of
