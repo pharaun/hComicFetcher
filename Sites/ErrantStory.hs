@@ -92,12 +92,8 @@ errantStoryPageParse (WebpageReply html VolIndex) = do
             notSameLevel targetLevel (_, (level, _)) = targetLevel /= level
 
     levelToComicTagMapping :: ComicTag -> (Url, (String, String)) -> (Url, ComicTag)
-    levelToComicTagMapping parent (url, ("level-3", name)) =
-        let (chp, chpName) = fixChp name
-        in (url, parent {ctChapter = Just $ UnitTag [StandAlone $ Digit chp Nothing Nothing Nothing] chpName})
-    levelToComicTagMapping parent (url, ("level-2", name)) =
-        let (vol, volName) = fixVol name
-        in (url, parent {ctVolume = Just $ UnitTag [StandAlone $ Digit vol Nothing Nothing Nothing] volName})
+    levelToComicTagMapping parent (url, ("level-3", name)) = (url, parent {ctChapter = fixChapter name})
+    levelToComicTagMapping parent (url, ("level-2", name)) = (url, parent {ctVolume = fixVolume name})
     levelToComicTagMapping parent (url, ("level-1", name)) = (url, parent {ctStoryName = Just $ T.pack name})
     levelToComicTagMapping parent content = throw $ DebugException "levelToComicTagMapping" ("Parent: " ++ show parent ++ " - Content: " ++ show content)
 

@@ -13,8 +13,10 @@ import Test.QuickCheck.Modifiers
 import Types
 
 -- Parser to test
-import Sites.Util
 import Fetcher
+import Parser.VolChpParser
+import Parser.VolChpPrinter
+import Parser.Words
 
 
 -- Quickcheck instances
@@ -121,6 +123,7 @@ checkSimplifiedDigit ast =
                     else False
         Right a -> (emptySD ast) == a
 
+-- StandAlone (Digit 6 Nothing Nothing (Just "v"))
 checkSingleDigits ast =
     case (parse digitsParse "" (formatDigits $ cleanRangeDigit ast)) of
         Left _  ->  False
@@ -197,3 +200,117 @@ strictCleanRangeDigit (RangeDigit a b) = RangeDigit (firstDigit a) (firstDigit b
 ---- Sub Digits
 --data SubDigit = DotSubDigit (Maybe Integer) T.Text
 --              deriving (Show, Eq)
+
+
+
+
+-- Format:
+-- Chp 00
+-- Chp TBD
+-- Chp.00
+-- Chp.TBD
+-- Chp 00: title
+-- Chp.00: title
+-- Chp.TBD: title
+--
+-- Chp 00.1
+-- Chp.00.1
+-- Chp 00.1: title
+-- Chp.00.1: title
+--
+-- Chp Extra
+-- Chp.Extra
+-- Chp Extra: title
+-- Chp.Extra: title
+--
+-- Chp Extra Content
+-- Chp.Extra Content
+-- Chp Extra Content: title
+-- Chp.Extra Content: title
+--
+-- Chp 00v2
+-- Chp.00v2
+-- Chp 00v2: title
+-- Chp.00v2: title
+--
+-- Chp 00.1v2
+-- Chp.00.1v2
+-- Chp 00.1v2: title
+-- Chp.00.1v2: title
+--
+-- Chp 00a
+-- Chp.00a
+-- Chp 00a: title
+-- Chp.00a: title
+--
+-- Chp 00va
+-- Chp.00va
+-- Chp 00va: title
+-- Chp.00va: title
+--
+-- Chp 00 foobar
+-- Chp.00 foobar
+-- Chp 00.foobar
+-- Chp.00.foobar
+-- Chp 00 foobar: title
+-- Chp.00 foobar: title
+-- Chp 00.foobar: title
+-- Chp.00.foobar: title
+--
+-- Chp 1,2
+-- Chp.1,2
+-- Chp 1,2: title
+-- Chp.1,2: title
+--
+-- Chp 1-2
+-- Chp.1-2
+-- Chp 1-2: title
+-- Chp.1-2: title
+--
+-- Chp 1-2,4
+-- Chp.1-2,4
+-- Chp 1-2,4: title
+-- Chp.1-2,4: title
+--
+-- MISC
+--  - Vol x Chp y: title
+--  - Chp y: title
+--  - Chp y Read Online
+--  - Chp.Foo Bar Read Online
+--  - Chp.0: [Oneshot]
+--  - Chp.0: [Complete]
+
+
+--runTests :: IO ()
+--runTests = do
+--    putStrLn "volParse"
+--    print =<< runTestTT (buildParseTests volParse volParseData)
+--
+--buildParseTests parser testData = TestList $ map (\(src, dst) -> TestLabel (src ++ " -> " ++ dst) (parserTest parser src dst)) testData
+--parserTest parser src dst = TestCase (assertEqual "" (Just [dst]) (either (const Nothing) Just (parse parser "(stdin)" src)))
+
+volParseData :: [(String, String)]
+volParseData =
+    [ ("", "")
+    , ("Volume 02", "")
+    , ("Vol 12", "")
+    , ("Vol TBD", "")
+    , ("Vol.43", "")
+    , ("Vol.01", "")
+    , ("Vol.01v2", "")
+    , ("Vol.01.3", "")
+    , ("Vol.01.herp", "")
+    , ("Vol.01.herp omake", "")
+    , ("Vol.01 herp", "")
+    , ("V.01", "")
+    , ("V1", "")
+    , ("V 1", "")
+    , ("Vol 2-7", "")
+    , ("Vol 2,5,7", "")
+    , ("Vol 2-5,7", "")
+    , ("Vol 1,3-5,7", "")
+    , ("Vol 1,3-5,7-9", "")
+    , ("Vol 4a", "")
+    , ("Vol 4.3", "")
+    , ("Vol 4v2", "")
+    ]
