@@ -86,7 +86,7 @@ batotoCookie = CH.Cookie
 -- TODO: restart if the exception kills -- main.hs: InvalidUrlException "/ggmain/doublespreads/extrabits/Gil.jpg" "Invalid URL"
 fetch :: TBMChan (FetchType a) -> TBMChan (ReplyType a) -> IO ()
 fetch i o = withSocketsDo $ E.bracket
-    (CH.newManager CH.def)
+    (CH.newManager CH.conduitManagerSettings)
     CH.closeManager
     (\manager ->
         -- Forever loop (probably don't need the forever at all)
