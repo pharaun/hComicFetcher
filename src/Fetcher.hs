@@ -13,8 +13,6 @@ import Network (withSocketsDo)
 import Network.HTTP.Conduit (HttpException, Manager)
 import qualified Network.HTTP.Conduit as CH
 
-
-
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM.TBMChan
 
@@ -23,6 +21,7 @@ import Control.Monad.IO.Class (liftIO)
 
 import qualified Control.Exception as E
 import qualified Control.Monad as CM
+import Control.Monad.Catch (MonadThrow(..))
 
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Lazy as L
@@ -101,7 +100,7 @@ conduitFetcher :: (
     MonadResource m,
     Failure HttpException m
     ) => Manager -> TBMChan (FetchType a) -> TBMChan (ReplyType a) -> m ()
-conduitFetcher m i o = CT.sourceTBMChan i $= CL.mapMaybeM (fetcher m) $$ CT.sinkTBMChan o
+conduitFetcher m i o = CT.sourceTBMChan i $= CL.mapMaybeM (fetcher m) $$ CT.sinkTBMChan o True
 
 
 conduitFetcherList :: (
@@ -159,7 +158,7 @@ fetchStream :: (
     Failure HttpException m
     ) => Manager -> String -> m (C.ResumableSource m S.ByteString)
 fetchStream m url = do
-    req' <- CH.parseUrl url
+    req' <- liftIO $ CH.parseUrl url
 
     -- TODO: remove the batoto special case
     let req =   if "batoto" `DL.isInfixOf` url
