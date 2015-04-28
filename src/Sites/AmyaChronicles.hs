@@ -5,13 +5,14 @@ module Sites.AmyaChronicles
 
 import Network.HTTP.Types.URI (decodePathSegments)
 
-import Data.Maybe (catMaybes, maybeToList)
+import Data.Maybe (catMaybes, maybeToList, listToMaybe)
 
 import Data.List (isInfixOf, isPrefixOf, isSuffixOf)
 import qualified Data.List as DL
 import qualified Data.List.Split as SL
 
 import qualified Data.Text as T
+import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TLE
 import Data.Text.Encoding.Error (lenientDecode)
 import qualified Data.ByteString.Lazy.UTF8 as UL
@@ -36,8 +37,7 @@ import Sites.Util
 --
 amyaChronicles = Comic
     { comicName = "Amya Chronicles"
---    , seedPage = "http://www.amyachronicles.com/archives/comic/09292009"
-    , seedPage = "http://www.amyachronicles.com/archives/comic/1-43"
+    , seedPage = "http://www.amyachronicles.com/archives/comic/09292009"
     , seedType = undefined
 
     , pageParse = amyaChroniclesPageParse
@@ -45,16 +45,22 @@ amyaChronicles = Comic
 
 amyaChroniclesPageParse :: ReplyType t -> IO [FetchType t]
 amyaChroniclesPageParse (WebpageReply pg _) = do
-    let text = TLE.decodeUtf8With lenientDecode pg
+    let text = foldl (\c (a, b) -> TL.replace a b c) (TLE.decodeUtf8With lenientDecode pg)
+            [ (">>", ">&gt;")
+            , ("<<", "^lt;<")
+            , ("< ", "&lt; ")
+            -- , (" >", " &gt;") - Breaks the image match
+            ]
 
     putStrLn ""
+
+--    let fail = run True text
+--    print fail
 
     -- Next Page Link
     -- TODO: make it so it can match on only 'comic-nav-next'
     -- TODO: make it so that it only matches "class" attr
---    let next = text ^? html . allAttributed (folded . only "comic-nav-base comic-nav-next") . attr "href" . _Just
-
-    let next = run True text
+    let next = text ^? html . allAttributed (folded . only "comic-nav-base comic-nav-next") . attr "href" . _Just
     print next
 
     -- Page Name
@@ -63,18 +69,18 @@ amyaChroniclesPageParse (WebpageReply pg _) = do
     print name
 
     -- TODO: make it not be a Maybe (always needs a image)
-    let img = text ^. html . allAttributed (folded . only "comic") . allNamed (only "img") . attr "src"
+    let img = text ^. html . allAttributed (folded . only "comic") . allNamed (only "img") . attr "src" . _Just
     print img
 
     -- Search for double page image link
     -- TODO: make it actually verify that its a link to
     --      "THIS IS A DOUBLE PAGE SPREAD, CLICK HERE FOR FULL IMAGE!"
-    let spread = text ^? html . allNamed (only "strong") . elements . attr "href" . _Just
+    let spread = listToMaybe $ filter (T.isSuffixOf "jpg") (text ^.. html . allNamed (only "strong") . elements . attr "href" . _Just)
     print spread
 
     -- Fetching next page
---    return $ map (\url -> Webpage (T.unpack url) undefined) $ maybeToList next
-    return []
+--    return []
+    return $ map (\url -> Webpage (T.unpack url) undefined) $ maybeToList next
 
 
 -- Type of pages:
