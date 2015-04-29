@@ -26,6 +26,12 @@ import Control.Lens (to, only,(^?),ix, toListOf, folded, _Just, traverse, (.~), 
 import Text.Taggy
 import Text.Taggy.Lens
 
+-- Parser
+import Text.Parsec
+import Text.Parsec.Text
+import Data.Functor.Identity (Identity)
+import Control.Applicative ((*>), (<*), (<*>), (<$>), (<$), pure, liftA)
+import Data.Monoid (mconcat)
 
 
 -- Local imports
@@ -52,39 +58,74 @@ amyaChroniclesPageParse (WebpageReply pg _) = do
             -- , (" >", " &gt;") - Breaks the image match
             ]
 
-    putStrLn ""
-
---    let fail = run True text
---    print fail
-
     -- Next Page Link
     -- TODO: make it so it can match on only 'comic-nav-next'
     -- TODO: make it so that it only matches "class" attr
     let next = text ^? html . allAttributed (folded . only "comic-nav-base comic-nav-next") . attr "href" . _Just
-    print next
 
     -- Page Name
-    -- TODO: make it not be a Maybe (always needs a title)
     let name = text ^. html . allAttributed (folded . only "post-title") . contents
     print name
-
-    -- TODO: make it not be a Maybe (always needs a image)
-    let img = text ^. html . allAttributed (folded . only "comic") . allNamed (only "img") . attr "src" . _Just
-    print img
 
     -- Search for double page image link
     -- TODO: make it actually verify that its a link to
     --      "THIS IS A DOUBLE PAGE SPREAD, CLICK HERE FOR FULL IMAGE!"
-    let spread = listToMaybe $ filter (T.isSuffixOf "jpg") (text ^.. html . allNamed (only "strong") . elements . attr "href" . _Just)
-    print spread
+    let img = case (listToMaybe $ filter (T.isSuffixOf "jpg") (text ^.. html . allNamed (only "strong") . elements . attr "href" . _Just)) of
+            Nothing -> text ^. html . allAttributed (folded . only "comic") . allNamed (only "img") . attr "src" . _Just
+            Just x  -> x
+
+    -- Parse the title and create the tag.
+    case parseTitle name img of
+        Left _  -> return $ map (\url -> Webpage (T.unpack url) undefined) $ maybeToList next
+        Right x -> return $ [Image (T.unpack img) x] ++ (map (\url -> Webpage (T.unpack url) undefined) $ maybeToList next)
 
     -- Fetching next page
---    return []
-    return $ map (\url -> Webpage (T.unpack url) undefined) $ maybeToList next
 
 
--- Type of pages:
---  Single page - 1.00 - Chp.Page
---  Short Story - Lenna 06 - Name Page
---  Double page - 4.86 – 4.87 - Chp.Page-Chp.Page
---  Artwork - Artwork by Andrew Gregoire - Artwork/Andrew_Gregoire
+parseTitle name url = runParser (titles url) () "" name
+
+titles :: T.Text -> ParsecT T.Text u Identity ComicTag
+titles url = choice
+    [ try (do
+        chp <- numParse
+        char '.'
+        pg <- numParse
+        eof
+        return $ mainStory chp url)
+
+    , try (do
+        chp <- numParse
+        char '.'
+        pg <- numParse
+        space
+        char '–'
+        space
+        chp' <- numParse
+        char '.'
+        pg' <- numParse
+        eof
+        return $ mainStory chp url)
+
+    , try (do
+        name <- wordParse
+        space
+        numParse
+        eof
+        return $ shortStory name url)
+
+    , (return $ artStory url)
+    ]
+
+numParse :: ParsecT T.Text u Identity Integer
+numParse = liftA read (many1 digit)
+
+wordParse :: ParsecT T.Text u Identity T.Text
+wordParse = liftA T.pack (many1 letter)
+
+
+-- Comic Tag
+mainStory chp url = ComicTag "amya_chronicles" Nothing Nothing (Just $ UnitTag [StandAlone $ Digit chp Nothing Nothing Nothing] Nothing) (Just $ last $ decodePathSegments $ US.fromString $ T.unpack url)
+
+shortStory storyName url = ComicTag "amya_chronicles" (Just storyName) Nothing Nothing (Just $ last $ decodePathSegments $ US.fromString $ T.unpack url)
+
+artStory url = ComicTag "amya_chronicles" (Just "artwork") Nothing Nothing (Just $ last $ decodePathSegments $ US.fromString $ T.unpack url)
