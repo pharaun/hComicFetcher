@@ -7,6 +7,7 @@ module Sites.Comic
     , module Sites.GunnerkrigCourt
     , module Sites.AmyaChronicles
     , module Sites.FreakAngels
+    , module Sites.DenizensAttention
     ) where
 
 import Sites.Batoto
@@ -17,3 +18,4 @@ import Sites.GirlGenius
 import Sites.GunnerkrigCourt
 import Sites.AmyaChronicles
 import Sites.FreakAngels
+import Sites.DenizensAttention
