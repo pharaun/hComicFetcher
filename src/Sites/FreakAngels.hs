@@ -42,7 +42,7 @@ import Types
 -- Tags
 data Tag = Initial -- The initial page
          | Book Bool ComicTag -- The specific Book (Book 1 -> 6 + notes), True if notes
-         | BookEpisode ComicTag -- The specific book + episode (Episode 0015)
+         | BookEpisode US.ByteString ComicTag -- page1 url, The specific book + episode (Episode 0015)
          | Page ComicTag -- Single comic page
 
 --
@@ -68,10 +68,10 @@ freakAngelsPageParse (WebpageReply pg Initial) = do
            . children . traverse . named "li"
            . children . traverse . to urlAndName . _Just
 
+    putStrLn "Parsing books"
     print ul
     putStrLn ""
---    return $ map bookNameToComicTag $ DL.filter (BS.isInfixOf "cat" . snd) ul
-    return [head $ map bookNameToComicTag $ DL.filter (BS.isInfixOf "cat" . snd) ul]
+    return $ map bookNameToComicTag $ DL.filter (BS.isInfixOf "cat" . snd) ul
 
 freakAngelsPageParse (WebpageReply pg (Book notes ct)) = do
     let page = BL.toStrict pg
@@ -88,29 +88,49 @@ freakAngelsPageParse (WebpageReply pg (Book notes ct)) = do
              . children . traverse . named "a"
              . attributes . to (lookup "href") . _Just
 
-    print $ zip name href
+    let titleHref = filter (BS.isPrefixOf "FreakAngels: Episode" . fst) $ zip name href
 
-    -- TODO: if not Notes CT filter out any non "Episode x"
-    -- TODO: then create the - BookEpisode ComicTag -- The specific book + episode (Episode 0015)
+    putStrLn "Parsing Episode"
+    print titleHref
+    putStrLn ""
+    return $ map (bookEpisodeToComicTag ct) titleHref
 
-    return []
-
-freakAngelsPageParse (WebpageReply pg (BookEpisode ct)) = do
+freakAngelsPageParse (WebpageReply pg (BookEpisode page1 ct)) = do
     let page = BL.toStrict pg
 
     -- Find the url to each page
+    --  .navpagenav > li:nth-child(2)
+    let pages = page ^.. typedHTML . to allNodes
+              . traverse . named "ul" . parameterized "class" "navpagenav"
+              . children . ix 1
+              . children . traverse . named "span"
+              . children . traverse . named "a"
+              . attributes . to (lookup "href") . _Just
 
+    let pages' = page1 : pages
 
-    -- TODO: Can nicely just feed the first page for free to the Page parser
-    return []
+    putStrLn "Parsing Pages"
+    print pages
+    putStrLn ""
+    return $ map (\url -> Webpage (US.toString url) $ Page ct) pages'
 
 freakAngelsPageParse (WebpageReply pg (Page ct)) = do
     let page = BL.toStrict pg
 
     -- Fetch the image to download to disk
+    --  .entry_page > p:nth-child(1) > img:nth-child(1)
+    let img = page ^. typedHTML . to allNodes
+            . traverse . named "div" . parameterized "class" "entry_page"
+            . children . ix 1
+            . children . traverse . named "img"
+            . attributes . to (lookup "src") . _Just
 
 
-    return []
+    putStrLn "Parsing Image"
+    print img
+    putStrLn ""
+
+    return [Image (US.toString img) ct{ctFileName = Just $ last $ decodePathSegments $ img}]
 
 
 
@@ -135,3 +155,10 @@ bookNameToComicTag ("Visual Archive: Book Four", url) = Webpage (US.toString url
 bookNameToComicTag ("Visual Archive: Book Five", url) = Webpage (US.toString url) (Book False $ ComicTag "Freak Angels" Nothing (Just $ UnitTag [StandAlone $ Digit 5 Nothing Nothing Nothing] Nothing) Nothing Nothing)
 bookNameToComicTag ("Visual Archive: Book Six", url) = Webpage (US.toString url) (Book False $ ComicTag "Freak Angels" Nothing (Just $ UnitTag [StandAlone $ Digit 6 Nothing Nothing Nothing] Nothing) Nothing Nothing)
 bookNameToComicTag (name, url) = Webpage (US.toString url) (Book True $ ComicTag "Freak Angels" Nothing (Just $ UnitTag [] $ Just $ TE.decodeUtf8 name) Nothing Nothing)
+
+
+-- Title, url
+bookEpisodeToComicTag :: ComicTag -> (US.ByteString, US.ByteString) -> FetchType Tag
+bookEpisodeToComicTag ct (title, url) = Webpage (US.toString url) (BookEpisode url $ ct{ctChapter = Just $ UnitTag [StandAlone $ Digit (parseDigit title) Nothing Nothing Nothing] Nothing})
+  where
+    parseDigit t = read $ US.toString $ BS.reverse $ BS.take 4 $ BS.reverse t
