@@ -88,6 +88,7 @@ freakAngelsPageParse (WebpageReply pg (Book notes ct)) = do
              . children . traverse . named "a"
              . attributes . to (lookup "href") . _Just
 
+    -- TODO: implement something to handle non-comic page page (notes)
     let titleHref = filter (BS.isPrefixOf "FreakAngels: Episode" . fst) $ zip name href
 
     putStrLn "Parsing Episode"
@@ -107,6 +108,7 @@ freakAngelsPageParse (WebpageReply pg (BookEpisode page1 ct)) = do
               . children . traverse . named "a"
               . attributes . to (lookup "href") . _Just
 
+    -- TODO: Apparently page 7 on some comic can be special
     let pages' = page1 : pages
 
     putStrLn "Parsing Pages"
@@ -125,12 +127,14 @@ freakAngelsPageParse (WebpageReply pg (Page ct)) = do
             . children . traverse . named "img"
             . attributes . to (lookup "src") . _Just
 
-
     putStrLn "Parsing Image"
     print img
     putStrLn ""
 
-    return [Image (US.toString img) ct{ctFileName = Just $ last $ decodePathSegments $ img}]
+    -- TODO: implement something to handle non-comic page page (notes)
+    if BS.null img then (putStrLn "Dropping" >> return []) else (
+        return [Image (US.toString img) ct{ctFileName = Just $ last $ decodePathSegments $ img}]
+        )
 
 
 
