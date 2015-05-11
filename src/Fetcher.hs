@@ -3,9 +3,10 @@ module Fetcher
     ( fetch
     ) where
 
-import Data.Conduit (($=), ($$), ($$+), ($$+-), MonadBaseControl, MonadResource)
+import Data.Conduit (($=), ($$), ($$+), ($$+-))
 import qualified Data.Conduit as C
-import qualified Data.Conduit.Filesystem as CF
+import qualified Data.Conduit.Combinators as CF
+import Conduit (MonadBaseControl, MonadResource, runResourceT)
 import qualified Data.Conduit.List as CL
 import qualified Data.Conduit.TMChan as CT
 
@@ -89,7 +90,7 @@ fetch i o = withSocketsDo $ E.bracket
     CH.closeManager
     (\manager ->
         -- Forever loop (probably don't need the forever at all)
-        CM.forever $ C.runResourceT $ conduitFetcher manager i o
+        CM.forever $ runResourceT $ conduitFetcher manager i o
     )
 
 

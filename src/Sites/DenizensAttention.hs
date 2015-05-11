@@ -73,6 +73,7 @@ denizensAttentionPageParse (WebpageReply pg Initial) = do
     print chp
     putStrLn ""
 
+    -- TODO: add in the chapter name here as well
     return $ map toChp chp
 
 denizensAttentionPageParse (WebpageReply pg (Chp ct)) = do

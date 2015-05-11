@@ -67,15 +67,19 @@ import Sites.Comic
 --  - Defined stop point, Errant Story
 --  - Some command line arg for picking which comic to run
 main = do
+    -- TODO: broken
+--    processTarget gunnerkrigCourt
+--    processTarget errantStory
+
+    -- Functional
 --    processTarget doesNotPlayWellWithOthers
 --    processTarget exploitationNow
 --    processTarget girlGenius
---    processTarget gunnerkrigCourt
---    processTarget errantStory
 --    processTarget $ batoto {seedPage = "http://www.batoto.net/comic/_/comics/yotsubato-r311"}
 --    processTarget amyaChronicles
 --    processTarget freakAngels
-    processTarget denizensAttention
+--    processTarget denizensAttention
+    processTarget disenchanted
 
   where
     -- TODO: Redo this so that it can accept multiple calls for each target
