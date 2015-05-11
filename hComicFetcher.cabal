@@ -50,3 +50,5 @@ executable hComicFetcher
                       , taggy-lens >= 0.1.2
                       , taggy >= 0.1.4
                       , lens >= 4.9.1
+                      , tagsoup
+                      , fast-tagsoup
