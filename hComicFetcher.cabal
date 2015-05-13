@@ -53,4 +53,7 @@ executable hComicFetcher
                       , tagsoup
                       , fast-tagsoup
 
-                      , xml-conduit
+                      , html-conduit
+                      , xml-html-conduit-lens
+
+                      , containers
