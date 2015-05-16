@@ -79,7 +79,8 @@ main = do
 --    processTarget amyaChronicles
 --    processTarget freakAngels
 --    processTarget denizensAttention
-    processTarget disenchanted
+--    processTarget disenchanted
+    processTarget tryingHuman
 
   where
     -- TODO: Redo this so that it can accept multiple calls for each target

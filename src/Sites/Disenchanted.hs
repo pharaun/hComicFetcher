@@ -45,8 +45,7 @@ import Types
 --
 disenchanted = Comic
     { comicName = "Disenchanted"
---    , seedPage = "http://www.disenchantedcomic.com/webcomic/1/"
-    , seedPage = "http://www.disenchantedcomic.com/webcomic/2/25/"
+    , seedPage = "http://www.disenchantedcomic.com/webcomic/1"
     , seedType = undefined
 
     , pageParse = disenchantedPageParse
@@ -73,32 +72,30 @@ disenchantedPageParse (WebpageReply pg _) = do
 
     -- Next page
     --  #webcomic-right > a:nth-child(2)
-    --  TODO: Its fetching two here, should only fetch one
-    let next = pg ^. html
+    --  ["http://www.disenchantedcomic.com/webcomic/1/2/"]
+    --  ["http://www.disenchantedcomic.com/webcomic/1/2/","http://www.disenchantedcomic.com/webcomic/1/4/"]
+    let next = head $ reverse (pg ^.. html
              . deep (attributed (ix "id" . only "webcomic-right"))
              . node "a"
-             . attr "href" . _Just
+             . attr "href" . _Just)
     print next
 
     -- Next ep
     --  .nav-links > a:nth-child(3)
-    --  TODO: fetching invalid url on episode 2
-    let nextEp = pg ^. html
+    --  ["/webcomic/1/","/webcomic/","http://www.disenchantedcomic.com/webcomic/2/","http://freakangels.com/whitechapel/","/city-maps/"]
+    --  ["http://www.disenchantedcomic.com/webcomic/1/","/webcomic/1/","/webcomic/","http://www.disenchantedcomic.com/webcomic/3/","http://freakangels.com/whitechapel/","/city-maps/"]
+    let nextEp = head $ tail $ tail $ reverse (pg ^.. html
                . deep (attributed (ix "class" . only "nav-links"))
-               . ix 2
-               . attr "href" . _Just
+               . node "a"
+               . attr "href" . _Just)
     print nextEp
     putStrLn ""
 
-    print $ parseTitle name image
-
-    return []
-
---    case parseTitle name image of
---        Left _          -> return []
---        Right (ct, nEp) -> return [ Image (T.unpack image) ct
---                                  , Webpage (T.unpack (if nEp then nextEp else next)) undefined
---                                  ]
+    case parseTitle name image of
+        Left _          -> return []
+        Right (ct, nEp) -> return [ Image (T.unpack image) ct
+                                  , Webpage (T.unpack (if nEp then nextEp else next)) undefined
+                                  ]
 
 
 parseTitle name url = runParser (titles url) () "" name
@@ -120,7 +117,11 @@ titles url = do
     char ')'
     eof
     return (
-        ComicTag "disenchanted" Nothing Nothing (Just $ UnitTag [StandAlone $ Digit ep Nothing Nothing Nothing] Nothing) (Just $ last $ decodePathSegments $ US.fromString $ T.unpack url),
+        ComicTag "disenchanted" Nothing Nothing (Just $ UnitTag [StandAlone $ Digit ep Nothing Nothing Nothing] Nothing) (Just $ T.concat
+            [ T.justifyRight 2 '0' $ T.pack $ show cur
+            , "-"
+            , last $ decodePathSegments $ US.fromString $ T.unpack url
+            ]),
         (cur == tot)
         )
 

@@ -57,3 +57,7 @@ executable hComicFetcher
                       , xml-html-conduit-lens
 
                       , containers
+
+                      -- Other parsers
+                      , tagchup
+                      , HaXml
