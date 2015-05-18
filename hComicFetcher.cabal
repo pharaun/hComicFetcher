@@ -61,3 +61,4 @@ executable hComicFetcher
                       -- Other parsers
                       , tagchup
                       , HaXml
+                      , xml-basic
