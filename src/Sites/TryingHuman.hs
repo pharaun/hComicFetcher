@@ -10,57 +10,96 @@ import Data.List (isInfixOf, isPrefixOf, isSuffixOf)
 import qualified Data.List as DL
 import qualified Data.List.Split as SL
 
-import Text.XML.HXT.Core
-
 import qualified Data.Text as T
 import qualified Data.ByteString.Lazy.UTF8 as UL
 import qualified Data.ByteString.UTF8 as US
+import qualified Data.ByteString.Lazy as BL
 
 import Control.Monad
 
 -- Local imports
 import Types
+import Parser.Words
 
--- Tagchup
-import qualified Text.HTML.Tagchup.Format as Format
-import qualified Text.HTML.Tagchup.Parser as Parser
-import qualified Text.HTML.Tagchup.Process as Process
-import qualified Text.HTML.Tagchup.Tag as Tag
-import qualified Text.HTML.Tagchup.Tag.Match as MTag
-import qualified Text.XML.Basic.Name as Name
-import qualified Text.XML.Basic.Attribute as Attribute
-import qualified Text.XML.Basic.Name.LowerCase as NameLC
-import qualified Text.XML.Basic.Name.MixedCase as Name
+-- Tagsoup
+import Text.HTML.TagSoup hiding (parseTags, renderTags)
+import Text.HTML.TagSoup.Fast
 
-
+-- Tags
+data CTag = Initial -- The initial page
+         | Page ComicTag Integer
 
 --
 -- TryingHuman
 --
+rootUrl = "http://tryinghuman.com/"
 tryingHuman = Comic
     { comicName = "Trying Human"
-    , seedPage = "http://tryinghuman.com/comic.php?id=1"
-    , seedType = undefined
+    , seedPage = rootUrl ++ "archive.php"
+    , seedType = Initial
 
     , pageParse = tryingHumanPageParse
     }
 
-tryingHumanPageParse :: ReplyType t -> IO [FetchType t]
-tryingHumanPageParse (WebpageReply html _) = do
-    let doc = Parser.runSoup $ UL.toString html
+tryingHumanPageParse :: ReplyType CTag -> IO [FetchType CTag]
+tryingHumanPageParse (WebpageReply html Initial) = do
+    let page = parseTagsT $ BL.toStrict html
 
-    -- Comic title
-    --  #comictitle
-    let title = titleParse $ doc
+    let subset = (
+                filterAny
+                    [ (\a -> isTagText a && T.isPrefixOf (T.pack "VOLUME") (fromTagText a))
+                    , (\a -> isTagText a && T.isPrefixOf (T.pack "Chapter") (fromTagText a))
+                    , (\a -> isTagText a && T.isPrefixOf (T.pack "Prologue") (fromTagText a))
+                    , (\a -> a ~== "<a>" && T.isPrefixOf (T.pack rootUrl) (fromAttrib (T.pack "href") a))
+                    ] $
+                (
+                takeWhile (~/= "<select>") $
+                dropWhile (~/= "<div id=maincontent>") page)
+                ++ (
+                dropWhile (~/= "</select>") $
+                dropWhile (~/= "<div id=maincontent>") page))
 
-    print title
+    return $ buildTreeUrl subset
 
-    return []
+tryingHumanPageParse (WebpageReply html (Page ct pg)) = do
+    let page = parseTagsT $ BL.toStrict html
+
+    let img = (
+            (fromAttrib $ T.pack "src") $
+            head $
+            filter (~== "<img id=comic>") page)
+
+    print img
+    putStrLn ""
+
+    return [Image (rootUrl ++ T.unpack img) (toPage ct pg img)]
 
 
-titleParse :: [Tag.T NameLC.T String] -> String
-titleParse =
-    flip Format.htmlOrXhtml "" .
-    tail .
-    takeWhile (not . MTag.close (Name.match "div")) .
-    dropWhile (not . MTag.openAttrNameLit "div" "id" (== "comictitle"))
+filterAny :: [a -> Bool] -> [a] -> [a]
+filterAny [] [] = []
+filterAny [] xs = xs
+filterAny xs ys = filter (or . flip map xs . flip id) ys
+
+toPage :: ComicTag -> Integer -> T.Text -> ComicTag
+toPage ct page url = ct{ctFileName = Just $ T.justifyRight 8 '0' $ T.pack (show page ++ (T.unpack $ T.dropWhile (/= '.') $ last $ decodePathSegments $ US.fromString $ T.unpack url))}
+
+buildTreeUrl :: [Tag T.Text] -> [FetchType CTag]
+buildTreeUrl xs = catMaybes $ snd $ DL.mapAccumL accum (T.pack "", T.pack "", 1) xs
+  where
+    accum (vol, chp, pg) x
+        | isTagText x && T.isPrefixOf (T.pack "VOLUME") (fromTagText x)     = ((fromTagText x, chp, pg), Nothing)
+        | isTagText x && T.isPrefixOf (T.pack "Chapter") (fromTagText x)    = ((vol, fromTagText x, pg), Nothing)
+        | isTagText x && T.isPrefixOf (T.pack "Prologue") (fromTagText x)   = ((vol, fromTagText x, pg), Nothing)
+        | otherwise                                                         = ((vol, chp, pg + 1), Just (toCT vol chp pg $ fromAttrib (T.pack "href") x))
+
+toCT :: T.Text -> T.Text -> Integer -> T.Text -> FetchType CTag
+toCT vol chp pg url = Webpage (T.unpack url) (Page (ComicTag (T.pack "Trying Human") Nothing (Just $ UnitTag [StandAlone $ Digit (parseVol vol) Nothing Nothing Nothing] Nothing) (Just $ UnitTag [StandAlone $ Digit (parseChp chp) Nothing Nothing Nothing] Nothing) Nothing) pg)
+
+parseVol :: T.Text -> Integer
+parseVol t = wordToNumber $ T.unpack $ T.drop (length "VOLUME ") t
+
+parseChp :: T.Text -> Integer
+parseChp t
+    | (t == T.pack "Prologue")  = 0
+    | otherwise                 = wordToNumber $ T.unpack $ T.drop (length "Chapter ") t
+
