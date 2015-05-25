@@ -6,16 +6,11 @@ import Network.HTTP.Types.URI (decodePathSegments)
 
 import Data.Maybe (catMaybes)
 
-import Data.List (isInfixOf, isPrefixOf, isSuffixOf)
 import qualified Data.List as DL
-import qualified Data.List.Split as SL
 
 import qualified Data.Text as T
-import qualified Data.ByteString.Lazy.UTF8 as UL
 import qualified Data.ByteString.UTF8 as US
 import qualified Data.ByteString.Lazy as BL
-
-import Control.Monad
 
 -- Local imports
 import Types

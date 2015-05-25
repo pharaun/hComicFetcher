@@ -1,6 +1,6 @@
 {-# LANGUAGE Rank2Types, DeriveDataTypeable #-}
 module Types
-    ( Url(..)
+    ( Url
     , FetchType(..)
     , ReplyType(..)
 
@@ -17,9 +17,7 @@ module Types
     , DebugException(..)
     ) where
 
-import Text.XML.HXT.Core
 import qualified Data.ByteString.Lazy.UTF8 as UL
-import qualified Filesystem.Path.CurrentOS as FPO
 import qualified Data.Text as T
 
 import Control.Exception

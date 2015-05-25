@@ -5,36 +5,16 @@ module Sites.Disenchanted
 
 import Network.HTTP.Types.URI (decodePathSegments)
 
-import Data.Maybe (catMaybes, maybeToList, listToMaybe)
-
-import Data.List (isInfixOf, isPrefixOf, isSuffixOf)
-import qualified Data.List as DL
-import qualified Data.List.Split as SL
-import qualified Data.Map.Lazy as Map
-
 import qualified Data.Text as T
-import qualified Data.Text.Lazy as TL
-import qualified Data.Text.Lazy.Encoding as TLE
-import qualified Data.Text.Encoding as TE
-import Data.Text.Encoding.Error (lenientDecode)
-import qualified Data.ByteString.Lazy.UTF8 as UL
 import qualified Data.ByteString.UTF8 as US
-import qualified Data.ByteString.Lazy as BL
-import qualified Data.ByteString as BS
 
 -- xml-html-conduit-lens
 import Control.Lens
-import Text.Xml.Lens
-import Text.HTML.DOM
-
+import Text.Xml.Lens hiding (name)
 
 -- Parser
 import Text.Parsec
-import Text.Parsec.Text
-import Data.Functor.Identity (Identity)
-import Control.Applicative ((*>), (<*), (<*>), (<$>), (<$), pure, liftA)
-import Data.Monoid (mconcat)
-
+import Control.Applicative (liftA)
 
 -- Local imports
 import Types
@@ -102,19 +82,19 @@ parseTitle name url = runParser (titles url) () "" name
 
 titles :: T.Text -> ParsecT T.Text u Identity (ComicTag, Bool)
 titles url = do
-    wordParse
-    space
+    _ <- wordParse
+    _ <- space
     ep <- numParse
-    space
-    char '('
-    wordParse
-    space
+    _ <- space
+    _ <- char '('
+    _ <- wordParse
+    _ <- space
     cur <- numParse
-    space
-    wordParse
-    space
+    _ <- space
+    _ <- wordParse
+    _ <- space
     tot <- numParse
-    char ')'
+    _ <- char ')'
     eof
     return (
         ComicTag "disenchanted" Nothing Nothing (Just $ UnitTag [StandAlone $ Digit ep Nothing Nothing Nothing] Nothing) (Just $ T.concat

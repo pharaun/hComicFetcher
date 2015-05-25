@@ -25,12 +25,9 @@ import qualified Data.Text as T
 
 -- Parsec
 import Text.Parsec
-import Text.Parsec.Text
 import Data.Functor.Identity (Identity)
 import Control.Applicative ((*>), (<*), (<*>), (<$>), (<$), pure, liftA)
 import Data.Monoid (mconcat)
-import Data.Either (either)
-import Data.Maybe (maybe)
 import Control.Monad
 
 -- Local Imports
@@ -181,10 +178,10 @@ digitsParse = choice
             return $ [range] ++ next
           )
         , try (do
-            digit <- StandAlone <$> simplifiedDigit
+            sDigit <- StandAlone <$> simplifiedDigit
 
             next <- option [] (char ',' >> digitsParse)
-            return $ [digit] ++ next
+            return $ [sDigit] ++ next
           )
         , (:[]) `fmap` (StandAlone <$> singleDigit)
         ]
@@ -193,13 +190,13 @@ digitsParse = choice
 -- TODO: May be able to just merge it into simplifiedDigit
 singleDigit :: ParsecT T.Text u Identity Digit
 singleDigit = do
-    digit <- numParse
+    nDigit <- numParse
     -- TODO: Fix this so it will check that its not a version first
     subdigit <- optionMaybe dotSubDigit
-    version <- optionMaybe version
+    mVersion <- optionMaybe version
 
     -- TODO: extend this to deal with {text} case
-    return $ Digit digit subdigit version Nothing
+    return $ Digit nDigit subdigit mVersion Nothing
 
 -- {simplified_digit} -> {num} ( {simplified_subdigit}?{version}?{letter}? )
 simplifiedDigit :: ParsecT T.Text u Identity Digit
@@ -252,6 +249,6 @@ letterParse = letter <++> many alphaNum <* eof
 manyTillPutBack :: (Stream s m t) => ParsecT s u m a -> ParsecT s u m end -> ParsecT s u m [a]
 manyTillPutBack p end = scan
    where
-    scan =  do{ lookAhead end; return [] }
+    scan =  do{ _ <- lookAhead end; return [] }
         <|>
             do{ x <- p; xs <- scan; return (x:xs) }

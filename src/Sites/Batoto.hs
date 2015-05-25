@@ -4,11 +4,7 @@ module Sites.Batoto
 
 import Network.HTTP.Types.URI (decodePathSegments)
 
-import Data.Maybe (catMaybes)
-
-import Data.List (isInfixOf, isPrefixOf, isSuffixOf)
-import qualified Data.List as DL
-import qualified Data.List.Split as SL
+import Data.List (isInfixOf)
 
 import Text.XML.HXT.Core
 
@@ -46,17 +42,17 @@ batotoPageParse :: ReplyType Tag -> IO [FetchType Tag]
 batotoPageParse (WebpageReply html Index) = do
     let doc = readString [withParseHTML yes, withWarnings no, withTagSoup] $ UL.toString html
     story <- runX $ doc //> storyName
-    volChpPage <- runX $ doc //> volChpPage
+    volChpPageP <- runX $ doc //> volChpPage
 
     -- Do we have any comic we want to store to disk?
     putStrLn "Story"
     mapM_ print story
 
     putStrLn "Vol Chp Pages"
-    mapM_ print volChpPage
+    mapM_ print volChpPageP
 
     -- Parse the Vol/Chp
-    let next = map (\(a, b) -> (a, volChpParse "batoto" (headMay story) b)) volChpPage
+    let next = map (\(a, b) -> (a, volChpParse "batoto" (headMay story) b)) volChpPageP
     return $ map (\(a, b) -> Webpage a (FirstPage b)) next
 
    where
@@ -80,16 +76,16 @@ batotoPageParse (WebpageReply html Index) = do
 batotoPageParse (WebpageReply html (FirstPage ct)) = do
     let doc = readString [withParseHTML yes, withWarnings no, withTagSoup] $ UL.toString html
     img <- runX $ doc //> comic
-    otherPages <- runX $ doc >>> otherPages
+    otherPagesP <- runX $ doc >>> otherPages
 
     -- Do we have any comic we want to store to disk?
     putStrLn "img url"
     mapM_ print img
 
     putStrLn "Next pages"
-    mapM_ print otherPages
+    mapM_ print otherPagesP
 
-    return $ map (\a -> Webpage a (Page ct)) otherPages ++ map (\a -> Image a $ comicTagFileName ct a) img
+    return $ map (\a -> Webpage a (Page ct)) otherPagesP ++ map (\a -> Image a $ comicTagFileName ct a) img
 
    where
     otherPages =

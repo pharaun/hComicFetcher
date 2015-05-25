@@ -5,38 +5,25 @@ module Sites.AmyaChronicles
 
 import Network.HTTP.Types.URI (decodePathSegments)
 
-import Data.Maybe (catMaybes, maybeToList, listToMaybe)
-
-import Data.List (isInfixOf, isPrefixOf, isSuffixOf)
-import qualified Data.List as DL
-import qualified Data.List.Split as SL
+import Data.Maybe (maybeToList, listToMaybe)
 
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TLE
 import Data.Text.Encoding.Error (lenientDecode)
-import qualified Data.ByteString.Lazy.UTF8 as UL
 import qualified Data.ByteString.UTF8 as US
 
--- Safehead
-import Safe
-
 -- Taggy
-import Control.Lens (to, only,(^?),ix, toListOf, folded, _Just, traverse, (.~), universe, (^..), (^.))
-import Text.Taggy
-import Text.Taggy.Lens
+import Control.Lens (only,(^?), folded, _Just, (^..), (^.))
+import Text.Taggy.Lens hiding (name)
 
 -- Parser
 import Text.Parsec
-import Text.Parsec.Text
 import Data.Functor.Identity (Identity)
-import Control.Applicative ((*>), (<*), (<*>), (<$>), (<$), pure, liftA)
-import Data.Monoid (mconcat)
-
+import Control.Applicative (liftA)
 
 -- Local imports
 import Types
-import Sites.Util
 
 --
 -- Amya Chronicles - Testing Taggy parsing
@@ -88,28 +75,28 @@ titles :: T.Text -> ParsecT T.Text u Identity ComicTag
 titles url = choice
     [ try (do
         chp <- numParse
-        char '.'
+        _ <- char '.'
         pg <- numParse
         eof
         return $ mainStory chp url)
 
     , try (do
         chp <- numParse
-        char '.'
+        _ <- char '.'
         pg <- numParse
-        space
-        char '–'
-        space
+        _ <- space
+        _ <- char '–'
+        _ <- space
         chp' <- numParse
-        char '.'
+        _ <- char '.'
         pg' <- numParse
         eof
         return $ mainStory chp url)
 
     , try (do
         name <- wordParse
-        space
-        numParse
+        _ <- space
+        _ <- numParse
         eof
         return $ shortStory name url)
 

@@ -22,8 +22,6 @@ import Control.Monad.IO.Class (liftIO)
 
 import qualified Control.Exception as E
 import qualified Control.Monad as CM
-import Control.Monad.Catch (MonadThrow(..))
-
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Lazy as L
 import qualified Data.ByteString.Lazy.UTF8 as UL
@@ -36,10 +34,7 @@ import qualified Filesystem.Path.CurrentOS as FPO
 
 import Crypto.Hash (digestToHexByteString, hash, Digest, SHA512)
 
-
-import Data.Maybe
 import qualified Data.List as DL
-import qualified Data.Text as T
 
 import Data.Time.Clock
 import Data.Time.Calendar
@@ -187,7 +182,7 @@ cacheExists = isFile . cacheFile
 
 cacheSource :: MonadResource m => String -> m (C.ResumableSource m S.ByteString)
 cacheSource url = do
-    (a, b) <- CF.sourceFile (cacheFile url) $$+ CL.take 0
+    (a, _) <- CF.sourceFile (cacheFile url) $$+ CL.take 0
     return a
 
 cacheSink :: MonadResource m => String -> C.Sink S.ByteString m ()

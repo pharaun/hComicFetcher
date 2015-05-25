@@ -4,24 +4,14 @@ module Sites.GirlGenius
 
 import Network.HTTP.Types.URI (decodePathSegments)
 
-import Data.Maybe (catMaybes)
-
-import Data.List (isInfixOf, isPrefixOf, isSuffixOf)
+import Data.List (isInfixOf, isPrefixOf)
 import qualified Data.List as DL
-import qualified Data.List.Split as SL
 
 import Text.XML.HXT.Core
-
-import Control.Concurrent (forkIO, killThread)
-import Control.Concurrent.STM.TBMChan
-import Control.Monad.STM (atomically)
-import qualified Control.Monad as CM
 
 import qualified Data.Text as T
 import qualified Data.ByteString.Lazy.UTF8 as UL
 import qualified Data.ByteString.UTF8 as US
-
-import Control.Exception (throw)
 
 -- Local imports
 import Types

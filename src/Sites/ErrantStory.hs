@@ -4,18 +4,10 @@ module Sites.ErrantStory
 
 import Network.HTTP.Types.URI (decodePathSegments)
 
-import Data.Maybe (catMaybes)
-
-import Data.List (isInfixOf, isPrefixOf, isSuffixOf)
+import Data.List (isInfixOf)
 import qualified Data.List as DL
-import qualified Data.List.Split as SL
 
-import Text.XML.HXT.Core
-
-import Control.Concurrent (forkIO, killThread)
-import Control.Concurrent.STM.TBMChan
-import Control.Monad.STM (atomically)
-import qualified Control.Monad as CM
+import Text.XML.HXT.Core hiding (root)
 
 import qualified Data.Text as T
 import qualified Data.ByteString.Lazy.UTF8 as UL
@@ -89,7 +81,7 @@ errantStoryPageParse (WebpageReply html VolIndex) = do
                  buildUrlAndComicTagMapping (snd $ levelToComicTagMapping root x) ours ++ buildUrlAndComicTagMapping root rest
         where
             notSameLevel :: String -> (Url, (String, String)) -> Bool
-            notSameLevel targetLevel (_, (level, _)) = targetLevel /= level
+            notSameLevel targetLevel (_, (tLevel, _)) = targetLevel /= tLevel
 
     levelToComicTagMapping :: ComicTag -> (Url, (String, String)) -> (Url, ComicTag)
     levelToComicTagMapping parent (url, ("level-3", name)) = (url, parent {ctChapter = fixChapter name})
@@ -151,7 +143,7 @@ errantStoryPageParse (WebpageReply html (Page ct)) = do
 
    where
     comic = hasAttrValue "id" (== "comic") >>> hasName "div" //> hasName "img" >>> hasAttr "src" >>> getAttrValue "src"
-    comicTagFileName ct url = ct{ctFileName = Just $ last $ decodePathSegments $ US.fromString url}
+    comicTagFileName ctt url = ctt{ctFileName = Just $ last $ decodePathSegments $ US.fromString url}
 
 
 -- Test data

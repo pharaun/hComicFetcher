@@ -9,15 +9,9 @@ module Parser.VolChpPrinter
     , formatVersion
     ) where
 
-import qualified Data.ByteString as S
-import qualified Data.ByteString.Lazy as L
-import qualified Data.ByteString.Lazy.UTF8 as UL
-import qualified Data.ByteString.UTF8 as US
-
 import Filesystem.Path.CurrentOS ((</>))
 import qualified Filesystem.Path as FP
 import qualified Filesystem.Path.CurrentOS as FPO
-
 
 import Data.Maybe
 
