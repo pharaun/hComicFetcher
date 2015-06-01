@@ -92,53 +92,76 @@ s2 = do
 
 -- Reinversion/Operational
 data WebFetch a where
-    FetchWebpage :: String -> WebFetch String
+    FetchWebpage :: [String] -> WebFetch String
     FetchImage :: String -> WebFetch ()
     Debug :: (Show s) => s -> WebFetch ()
 
-type WebFetchMonadT m a = ProgramT WebFetch m a
+type WebFetchMonad a = Program WebFetch a
 
-runWebFetchMonadT :: (Monad m, MonadIO m) => WebFetchMonadT m a -> m a
-runWebFetchMonadT = eval <=< viewT
+runWebFetchMonad :: WebFetchMonad a -> IO a
+runWebFetchMonad = eval . view
   where
-    eval :: (Monad m, MonadIO m) => ProgramViewT WebFetch m a -> m a
+    eval :: ProgramView WebFetch a -> IO a
     eval (Return x)                 = return x
-    eval (FetchWebpage u :>>= k)    = do
-        b <- liftIO $ fetchWebpage u (return . show)
-        runWebFetchMonadT (k b)
+
+    eval (FetchWebpage us :>>= k)   =
+        forM us (\u -> do
+            b <- fetchWebpage u (return . show)
+            runWebFetchMonad (k b))
+        >>= \(x:_) -> return x
 
     eval (FetchImage u :>>= k)      = do
-        liftIO $ fetchImage u
-        runWebFetchMonadT (k ())
+        fetchImage u
+        runWebFetchMonad (k ())
 
     eval (Debug s :>>= k)           = do
-        liftIO $ print s
-        runWebFetchMonadT (k ())
+        print s
+        runWebFetchMonad (k ())
 
 
-fwp :: (Monad m) => String -> WebFetchMonadT m String
+fwp :: [String] -> WebFetchMonad String
 fwp = singleton . FetchWebpage
 
-fi :: (Monad m) => String -> WebFetchMonadT m ()
+fi :: String -> WebFetchMonad ()
 fi = singleton . FetchImage
 
-debug :: (Show a, Monad m) => a -> WebFetchMonadT m ()
+debug :: (Show a) => a -> WebFetchMonad ()
 debug = singleton . Debug
 
 
-s3 :: Monad m => WebFetchMonadT m ()
 s3 = do
-    idx <- fwp "idx1"
+    debug "Approach one"
+    debug ""
+
+    idx <- fwp ["idx1"]
 
     -- Parsing
     debug idx
 
-    chp <- forM ["url1", "url2", "url3"] fwp
+    chp <- fwp ["url1", "url2", "url3"]
 
     -- Parse chps
     debug chp
 
     -- FetchImages
     forM_ ["urla", "urlb", "urlc"] fi
+
+    return ()
+
+s4 = do
+    debug "Approach two"
+    debug ""
+
+    -- Another approach
+    forM_ [("url1", "urla"), ("url2", "urlb"), ("url3", "urlc")] (\(pageUrl, imgUrl) -> do
+        -- Fetch page
+        pg <- fwp [pageUrl]
+
+        -- Parsing
+        debug pg
+
+        -- Fetch image
+        fi imgUrl
+        )
 
     return ()
