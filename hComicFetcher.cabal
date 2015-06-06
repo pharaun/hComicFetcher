@@ -62,3 +62,4 @@ executable hComicFetcher
 
                       -- Monad stuff
                       , operational
+                      , monad-coroutine
