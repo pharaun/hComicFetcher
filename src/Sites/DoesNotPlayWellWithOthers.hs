@@ -22,8 +22,7 @@ doesNotPlayWellWithOthers = Comic
     { comicName = "Does Not Play Well With Others"
     , seedPage = "http://www.doesnotplaywellwithothers.com/comics/pwc-000f"
     , seedType = undefined
-
-    , pageParse = dnpwwoPageParse
+    , pageParse = CallbackParser dnpwwoPageParse
     }
 
 dnpwwoPageParse :: ReplyType t -> IO [FetchType t]

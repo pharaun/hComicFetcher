@@ -13,6 +13,7 @@ module Types
     , SubDigit(..)
 
     , Comic(..)
+    , ComicParser(..)
 
     , DebugException(..)
     ) where
@@ -22,6 +23,7 @@ import qualified Data.Text as T
 
 import Control.Exception
 import Data.Typeable
+import Pipes
 
 -- Filesystem format - SiteName/StoryName/Volume/Chapter/Page.*
 --
@@ -149,18 +151,17 @@ data Comic t = Comic
 
     -- Seed page/type for kickstarting the parser/fetcher
     , seedPage :: String
---    , seedComicTag :: ComicTag
     , seedType :: t -- TAG
 
     -- Page parser, Parse a page and return a list of stuff to fetch,
-    , pageParse :: ReplyType t -> IO [FetchType t]
-
-    -- TODO: need some good way of convoying/tracking state for things such
-    -- as page numbering (page1, page2, page3...)
+    -- Pipeline parser (takes an input stream and output stream of stuff to fetch
+    , pageParse :: ComicParser t
     }
 
 
-
+-- Comic Parser types
+data ComicParser t = CallbackParser (ReplyType t -> IO [FetchType t])
+                   | PipelineParser (Pipe (ReplyType t) (FetchType t) IO ())
 
 
 

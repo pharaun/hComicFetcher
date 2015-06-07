@@ -27,8 +27,7 @@ disenchanted = Comic
     { comicName = "Disenchanted"
     , seedPage = "http://www.disenchantedcomic.com/webcomic/1"
     , seedType = undefined
-
-    , pageParse = disenchantedPageParse
+    , pageParse = CallbackParser disenchantedPageParse
     }
 
 disenchantedPageParse :: ReplyType t -> IO [FetchType t]

@@ -24,8 +24,7 @@ girlGenius = Comic
     { comicName = "Girl Genius"
     , seedPage = "http://www.girlgeniusonline.com/comic.php?date=20021104"
     , seedType = undefined
-
-    , pageParse = girlGeniusPageParse
+    , pageParse = CallbackParser girlGeniusPageParse
     }
 
 girlGeniusPageParse :: ReplyType t -> IO [FetchType t]

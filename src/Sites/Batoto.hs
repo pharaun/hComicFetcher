@@ -34,8 +34,7 @@ batoto = Comic
     { comicName = "Batoto"
     , seedPage = error "Please specify a Batoto comic."
     , seedType = Index
-
-    , pageParse = batotoPageParse
+    , pageParse = CallbackParser batotoPageParse
     }
 
 batotoPageParse :: ReplyType Tag -> IO [FetchType Tag]

@@ -32,8 +32,7 @@ amyaChronicles = Comic
     { comicName = "Amya Chronicles"
     , seedPage = "http://www.amyachronicles.com/archives/comic/09292009"
     , seedType = undefined
-
-    , pageParse = amyaChroniclesPageParse
+    , pageParse = CallbackParser amyaChroniclesPageParse
     }
 
 amyaChroniclesPageParse :: ReplyType t -> IO [FetchType t]

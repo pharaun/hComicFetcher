@@ -27,8 +27,7 @@ denizensAttention = Comic
     { comicName = "Denizens Attention"
     , seedPage = rootUrl ++ firstChapter
     , seedType = Initial
-
-    , pageParse = denizensAttentionPageParse
+    , pageParse = CallbackParser denizensAttentionPageParse
     }
 
 denizensAttentionPageParse :: ReplyType CTag -> IO [FetchType CTag]

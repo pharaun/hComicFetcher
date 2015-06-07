@@ -34,8 +34,7 @@ freakAngels = Comic
     { comicName = "Freak Angels"
     , seedPage = "http://www.freakangels.com"
     , seedType = Initial
-
-    , pageParse = freakAngelsPageParse
+    , pageParse = CallbackParser freakAngelsPageParse
     }
 
 freakAngelsPageParse :: ReplyType Tag -> IO [FetchType Tag]
