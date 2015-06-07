@@ -15,6 +15,7 @@ import qualified Data.ByteString.Lazy as BL
 -- Local imports
 import Types
 import Parser.Words
+import Sites.Util
 
 -- Tagsoup
 import Text.HTML.TagSoup hiding (parseTags, renderTags)
@@ -69,11 +70,6 @@ tryingHumanPageParse (WebpageReply html (Page ct pg)) = do
     return [Image (rootUrl ++ T.unpack img) (toPage ct pg img)]
 
 
-filterAny :: [a -> Bool] -> [a] -> [a]
-filterAny [] [] = []
-filterAny [] xs = xs
-filterAny xs ys = filter (or . flip map xs . flip id) ys
-
 toPage :: ComicTag -> Integer -> T.Text -> ComicTag
 toPage ct page url = ct{ctFileName = Just $ T.justifyRight 8 '0' $ T.pack (show page ++ (T.unpack $ T.dropWhile (/= '.') $ last $ decodePathSegments $ US.fromString $ T.unpack url))}
 
@@ -96,4 +92,3 @@ parseChp :: T.Text -> Integer
 parseChp t
     | (t == T.pack "Prologue")  = 0
     | otherwise                 = wordToNumber $ T.unpack $ T.drop (length "Chapter ") t
-

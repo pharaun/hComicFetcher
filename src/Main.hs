@@ -34,7 +34,8 @@
         a. If cancel/exit, should delete/re-download the corrupt file
 -}
 
-import Control.Concurrent (forkIO, killThread)
+import Control.Monad.Loops
+import Control.Concurrent (forkIO, killThread, threadDelay)
 import Control.Concurrent.STM.TBMChan
 import Control.Monad.STM (atomically)
 import qualified Control.Monad as CM
@@ -90,6 +91,12 @@ pipelineTarget Comic{seedPage=seedPage', seedType=seedType', pageParse=parse} = 
     case parse of
         CallbackParser cp -> runEffect $ (chanProducer toReturn) >-> (toPipeline cp) >-> (chanConsumer toFetch)
         PipelineParser pp -> runEffect $ (chanProducer toReturn) >-> pp >-> (chanConsumer toFetch)
+
+    -- TODO: Wait till queue is empty
+    -- - Hacky, need to have a check from queue empty
+    -- - Fetcher is done (downloading + write to disk)
+    untilM_ (liftIO $ threadDelay $ 1000000) (atomically $ isEmptyTBMChan toFetch)
+    liftIO $ threadDelay $ 1000000 * 10 -- Wait till image is written to disk
 
     -- We're done kill it
     killThread threadId

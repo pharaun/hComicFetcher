@@ -63,3 +63,4 @@ executable hComicFetcher
                       -- Monad stuff
                       , operational
                       , pipes
+                      , monad-loops
