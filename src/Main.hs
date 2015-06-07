@@ -71,26 +71,30 @@ import qualified Data.ByteString.Lazy.UTF8 as UL
 --  - Some command line arg for picking which comic to run
 main = do
     -- TODO: broken
---    processTarget gunnerkrigCourt
---    processTarget errantStory
+--    backwardTarget gunnerkrigCourt
+--    backwardTarget errantStory
 
     -- Functional
---    processTarget doesNotPlayWellWithOthers
---    processTarget exploitationNow
---    processTarget girlGenius
---    processTarget $ batoto {seedPage = "http://www.batoto.net/comic/_/comics/yotsubato-r311"}
---    processTarget amyaChronicles
---    processTarget freakAngels
---    processTarget denizensAttention
---    processTarget disenchanted
---    processTarget tryingHuman
+--    backwardTarget doesNotPlayWellWithOthers
+--    backwardTarget exploitationNow
+--    backwardTarget girlGenius
+--    backwardTarget $ batoto {seedPage = "http://www.batoto.net/comic/_/comics/yotsubato-r311"}
+--    backwardTarget amyaChronicles
+--    backwardTarget freakAngels
+--    backwardTarget denizensAttention
+--    backwardTarget disenchanted
+    backwardTarget tryingHuman
 
     -- New pipeline parsers
     pipelineTarget feyWinds
 
--- TODO: Redo this so that it can accept multiple calls for each target
-processTarget :: Comic a -> IO ()
-processTarget c@Comic{seedPage=seedPage, seedType=seedType} = do
+
+--
+-- Backward Compat parser target
+--
+backwardTarget :: Comic a -> IO ()
+backwardTarget Comic{seedPage=seedPage, seedType=seedType, pageParse=parse} = do
+
     -- Queues for processing stuff
     -- TODO: look into tweaking this and making the indexed parser not deadlock the whole thing... if there's more to add to the queue than can be processed
     toFetch <- atomically $ newTBMChan 10000
@@ -102,50 +106,22 @@ processTarget c@Comic{seedPage=seedPage, seedType=seedType} = do
     -- Start the fetcher
     threadId <- forkIO $ fetch toFetch toReturn
 
-    -- Do processing by pulling off each entry off the toReturn and submitting more
-    untilM_ (indexedParser c toReturn toFetch) id
+    -- Pipeline parser
+    runEffect $ (chanProducer toReturn) >-> (toPipeline parse) >-> (chanConsumer toFetch)
 
     -- We're done kill it
     killThread threadId
 
-
--- Indexer parser,
--- The mother of all parser, it parses various Tagged pages and then go from there
--- TODO:
---  * look into some form of state transformer monad for tracking state between parse run if needed
---  * This ^ is probably the Tag, which let us tag specific page with additional information if its needed
-indexedParser :: Comic a -> TBMChan (ReplyType a) -> TBMChan (FetchType a) -> IO Bool
-indexedParser Comic{pageParse=parse} i o = do
-    r <- atomically $ readTBMChan i
-    case r of
-        Nothing -> return False
-
-        Just x -> do
-            -- Parse the page
-            nextFetch <- parse x
-
-            -- Terminate if we decide there's no more nextPage to fetch
-            -- This does not work atm
---            CM.when (null nextFetch) $ atomically $ closeTBMChan o
-
-            -- Fetch them
-            atomically $ mapM_ (writeTBMChan o) nextFetch
-
-            -- We do want to keep going cos we just submitted another page to fetch
-            return True
-
-
--- Execute till result is false
-untilM_ :: (Monad m) => m a -> (a -> Bool) -> m ()
-untilM_ f p = do
-    x <- f
-    CM.when (p x) $ untilM_ f p
-
+toPipeline :: (ReplyType t -> IO [FetchType t]) -> Pipe (ReplyType t) (FetchType t) IO ()
+toPipeline old = forever $ do
+    a <- await
+    b <- liftIO $ old a
+    mapM_ yield b
 
 --
 -- New pipeline parser target
 --
-pipelineTarget :: Comic2 IO CTag -> IO ()
+pipelineTarget :: Comic2 CTag -> IO ()
 pipelineTarget Comic2{seedPage2=seedPage, seedType2=seedType, pipeParse=parse} = do
 
     -- Queues for processing stuff
@@ -186,13 +162,16 @@ data CTag = Initial
     deriving (Show)
 
 -- New comic type for pipeline targets
-data Comic2 m t = Comic2
+data Comic2 t = Comic2
     { comicName2 :: String
     , seedPage2 :: String
     , seedType2 :: t
 
+    -- Page parser, Parse a page and return a list of stuff to fetch,
+--    , pageParse :: ReplyType t -> IO [FetchType t]
+
     -- Pipeline parser (takes an input stream and output stream of stuff to fetch
-    , pipeParse :: Pipe (ReplyType t) (FetchType t) m ()
+    , pipeParse :: Pipe (ReplyType t) (FetchType t) IO ()
     }
 
 
