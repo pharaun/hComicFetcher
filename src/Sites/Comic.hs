@@ -10,7 +10,6 @@ module Sites.Comic
     , module Sites.DenizensAttention
     , module Sites.Disenchanted
     , module Sites.TryingHuman
-    , module Sites.FeyWinds
     ) where
 
 import Sites.Batoto
@@ -24,4 +23,3 @@ import Sites.FreakAngels
 import Sites.DenizensAttention
 import Sites.Disenchanted
 import Sites.TryingHuman
-import Sites.FeyWinds
