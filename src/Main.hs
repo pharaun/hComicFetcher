@@ -56,6 +56,11 @@ import Control.Monad.IO.Class
 -- Tagsoup
 import Text.HTML.TagSoup hiding (parseTags, renderTags)
 import Text.HTML.TagSoup.Fast
+
+-- Pipes
+import Pipes
+
+import qualified Data.ByteString.Lazy.UTF8 as UL
 --
 -- Fey Winds
 --
@@ -140,7 +145,7 @@ untilM_ f p = do
 --
 -- New pipeline parser target
 --
-pipelineTarget :: Comic2 a -> IO ()
+pipelineTarget :: Comic2 m a -> IO ()
 pipelineTarget Comic2{seedPage2=seedPage, seedType2=seedType, pipeParse=parse} = do
 
     -- Queues for processing stuff
@@ -165,7 +170,8 @@ pipelineTarget Comic2{seedPage2=seedPage, seedType2=seedType, pipeParse=parse} =
 
             Just x -> do
                 -- Parse the page
-                nextFetch <- parse x
+                let nextFetch = undefined
+--                nextFetch <- parse x
 
                 -- Terminate if we decide there's no more nextPage to fetch
                 -- This does not work atm
@@ -184,25 +190,20 @@ pipelineTarget Comic2{seedPage2=seedPage, seedType2=seedType, pipeParse=parse} =
 
 
 
---data ReplyType a = WebpageReply UL.ByteString a
---
---data FetchType a = Webpage Url a
---                 | Image Url ComicTag -- TODO: this is probably wrong type - We probably want FPO.FilePath
 
+
+data CTag = Initial
 
 -- New comic type for pipeline targets
-data Comic2 t = Comic2
+data Comic2 m t = Comic2
     { comicName2 :: String
     , seedPage2 :: String
     , seedType2 :: t
 
     -- Pipeline parser (takes an input stream and output stream of stuff to fetch
-    , pipeParse :: ReplyType t -> IO [FetchType t]
+    , pipeParse :: Pipe (ReplyType t) (FetchType t) m ()
     }
 
-
--- Tags
-data CTag = Initial -- Probably can just ingest and throw this away then start the WebFetchT monad
 
 rootPage = "http://feywinds.com/comic.html"
 feyWinds = Comic2
@@ -213,71 +214,52 @@ feyWinds = Comic2
     , pipeParse = feyWindsProxy
     }
 
-feyWindsProxy :: ReplyType CTag -> IO [FetchType CTag]
-feyWindsProxy (WebpageReply html Initial) = do
-    print "Entering interpreter"
+feyWindsProxy :: Pipe (ReplyType CTag) (FetchType CTag) IO ()
+feyWindsProxy = do
+    liftIO $ print "Entering interpreter"
+    runWebFetchT feyWindsParser
+    liftIO $ print "Exiting interpreter"
 
-    let a = runWebFetchT feyWindsParser
-    a
 
-    print "Exiting interpreter"
-
-    return []
-
-fetchWebpage url = do
-    liftIO $ print url
-    return "test"
-
-fetchImage url = do
-    liftIO $ print url
-    return ()
-
-feyWindsParser :: WebFetchT IO ()
+feyWindsParser :: WebFetchT (Pipe (ReplyType CTag) (FetchType CTag) IO) ()
 feyWindsParser = do
     debug "Fetching initial page"
     idx <- fwp [rootPage]
-
     debug "Parsing index page"
 
     return ()
-
-
 
 
 --
 -- Reinversion/Operational
 --
 data WebFetchI a where
-    FetchWebpage :: [String] -> WebFetchI String
-    FetchImage :: String -> WebFetchI ()
+    FetchWebpage :: [Url] -> WebFetchI (ReplyType CTag)
+    FetchImage :: Url -> WebFetchI () -- TODO: add comic tag here
     Debug :: (Show s) => s -> WebFetchI ()
 
 type WebFetchT m a = ProgramT WebFetchI m a
 
-runWebFetchT :: (MonadIO m, Monad m) => WebFetchT m () -> m ()
+runWebFetchT :: (MonadIO m, Monad m) => WebFetchT (Pipe (ReplyType CTag) (FetchType CTag) m) () -> Pipe (ReplyType CTag) (FetchType CTag) m ()
 runWebFetchT = eval <=< viewT
   where
-    eval :: (MonadIO m, Monad m) => ProgramViewT WebFetchI m () -> m ()
+    eval :: (MonadIO m, Monad m) => ProgramViewT WebFetchI (Pipe (ReplyType CTag) (FetchType CTag) m) () -> Pipe (ReplyType CTag) (FetchType CTag) m ()
     eval (Return _)                 = return ()
 
     eval (FetchWebpage us :>>= k)   =
-        forM_ us (\u -> do
-            b <- liftIO $ fetchWebpage u
-            runWebFetchT (k b))
+        forM_ us (\u -> (yield (Webpage u Initial)) >> await >>= \b -> runWebFetchT (k b))
 
-    eval (FetchImage u :>>= k)      = do
-        liftIO $ fetchImage u
-        runWebFetchT (k ())
+    eval (FetchImage u :>>= k)      = (yield (Image u undefined)) >> runWebFetchT (k ())
 
     eval (Debug s :>>= k)           = do
         liftIO $ print s
         runWebFetchT (k ())
 
 
-fwp :: [String] -> WebFetchT m String
+fwp :: [Url] -> WebFetchT m (ReplyType CTag)
 fwp = singleton . FetchWebpage
 
-fi :: String -> WebFetchT m ()
+fi :: Url -> WebFetchT m ()
 fi = singleton . FetchImage
 
 debug :: (Show a) => a -> WebFetchT m ()
