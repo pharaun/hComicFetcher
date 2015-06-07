@@ -145,7 +145,7 @@ untilM_ f p = do
 --
 -- New pipeline parser target
 --
-pipelineTarget :: Comic2 m a -> IO ()
+pipelineTarget :: Comic2 IO CTag -> IO ()
 pipelineTarget Comic2{seedPage2=seedPage, seedType2=seedType, pipeParse=parse} = do
 
     -- Queues for processing stuff
@@ -160,32 +160,22 @@ pipelineTarget Comic2{seedPage2=seedPage, seedType2=seedType, pipeParse=parse} =
     threadId <- forkIO $ fetch toFetch toReturn
 
     -- TODO: string up the pipeline (toReturn is input, toFetch is output)
-
-
-    -- Do processing by pulling off each entry off the toReturn and submitting more
-    untilM_ (do
-        r <- atomically $ readTBMChan toReturn
-        case r of
-            Nothing -> return False
-
-            Just x -> do
-                -- Parse the page
-                let nextFetch = undefined
---                nextFetch <- parse x
-
-                -- Terminate if we decide there's no more nextPage to fetch
-                -- This does not work atm
-    --            CM.when (null nextFetch) $ atomically $ closeTBMChan o
-
-                -- Fetch them
-                atomically $ mapM_ (writeTBMChan toFetch) nextFetch
-
-                -- We do want to keep going cos we just submitted another page to fetch
-                return True
-            ) id
+    runEffect $ (chanProducer toReturn) >-> parse >-> (chanConsumer toFetch)
 
     -- We're done kill it
     killThread threadId
+
+chanProducer :: (MonadIO m) => TBMChan (ReplyType a) -> Producer (ReplyType a) m ()
+chanProducer i = do
+    r <- liftIO $ atomically $ readTBMChan i
+    case r of
+        Nothing -> return ()
+        Just x  -> yield x >> chanProducer i
+
+chanConsumer :: (MonadIO m) => TBMChan (FetchType a) -> Consumer (FetchType a) m ()
+chanConsumer o = forever $ do
+    r <- await
+    liftIO $ atomically $ writeTBMChan o r
 
 
 
@@ -193,6 +183,7 @@ pipelineTarget Comic2{seedPage2=seedPage, seedType2=seedType, pipeParse=parse} =
 
 
 data CTag = Initial
+    deriving (Show)
 
 -- New comic type for pipeline targets
 data Comic2 m t = Comic2
@@ -215,16 +206,14 @@ feyWinds = Comic2
     }
 
 feyWindsProxy :: Pipe (ReplyType CTag) (FetchType CTag) IO ()
-feyWindsProxy = do
-    liftIO $ print "Entering interpreter"
-    runWebFetchT feyWindsParser
-    liftIO $ print "Exiting interpreter"
+feyWindsProxy = runWebFetchT feyWindsParser
 
 
 feyWindsParser :: WebFetchT (Pipe (ReplyType CTag) (FetchType CTag) IO) ()
 feyWindsParser = do
     debug "Fetching initial page"
     idx <- fwp [rootPage]
+    debug idx
     debug "Parsing index page"
 
     return ()

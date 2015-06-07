@@ -100,6 +100,7 @@ data SubDigit = DotSubDigit (Maybe Integer) T.Text
 type Url = String
 
 data ReplyType a = WebpageReply UL.ByteString a
+    deriving (Show)
 
 data FetchType a = Webpage Url a
                  | Image Url ComicTag -- TODO: this is probably wrong type - We probably want FPO.FilePath
