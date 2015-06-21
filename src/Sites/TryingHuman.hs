@@ -33,7 +33,7 @@ tryingHuman = Comic
     { comicName = "Trying Human"
     , seedPage = rootUrl ++ "archive.php"
     , seedType = Initial
-    , pageParse = CallbackParser tryingHumanPageParse
+    , pageParse = toPipeline tryingHumanPageParse
     }
 
 tryingHumanPageParse :: ReplyType CTag -> IO [FetchType CTag]

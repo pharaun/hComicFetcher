@@ -29,7 +29,7 @@ feyWinds = Comic
     { comicName = "Fey Winds"
     , seedPage = rootPage ++ "comic.html"
     , seedType = undefined
-    , pageParse = PipelineParser feyWindsProxy
+    , pageParse = feyWindsProxy
     }
 
 

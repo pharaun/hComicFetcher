@@ -88,9 +88,7 @@ pipelineTarget Comic{seedPage=seedPage', seedType=seedType', pageParse=parse} = 
     threadId <- forkIO $ fetch toFetch toReturn
 
     -- Pipeline parser
-    case parse of
-        CallbackParser cp -> runEffect $ (chanProducer toReturn) >-> (toPipeline cp) >-> (chanConsumer toFetch)
-        PipelineParser pp -> runEffect $ (chanProducer toReturn) >-> pp >-> (chanConsumer toFetch)
+    runEffect $ (chanProducer toReturn) >-> parse >-> (chanConsumer toFetch)
 
     -- TODO: Wait till queue is empty
     -- - Hacky, need to have a check from queue empty
@@ -100,12 +98,6 @@ pipelineTarget Comic{seedPage=seedPage', seedType=seedType', pageParse=parse} = 
 
     -- We're done kill it
     killThread threadId
-
-toPipeline :: (ReplyType t -> IO [FetchType t]) -> Pipe (ReplyType t) (FetchType t) IO ()
-toPipeline old = CM.forever $ do
-    a <- await
-    b <- liftIO $ old a
-    mapM_ yield b
 
 chanProducer :: (MonadIO m) => TBMChan (ReplyType a) -> Producer (ReplyType a) m ()
 chanProducer i = do

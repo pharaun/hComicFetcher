@@ -17,9 +17,10 @@ import Control.Lens hiding (children)
 import Text.XML.Expat.Lens hiding (name)
 import Text.XML.Expat.Tree
 
-
 -- Local imports
 import Types
+import Sites.Util (toPipeline)
+
 
 -- Tags
 data Tag = Initial -- The initial page
@@ -34,7 +35,7 @@ freakAngels = Comic
     { comicName = "Freak Angels"
     , seedPage = "http://www.freakangels.com"
     , seedType = Initial
-    , pageParse = CallbackParser freakAngelsPageParse
+    , pageParse = toPipeline freakAngelsPageParse
     }
 
 freakAngelsPageParse :: ReplyType Tag -> IO [FetchType Tag]

@@ -24,6 +24,7 @@ import Control.Applicative (liftA)
 
 -- Local imports
 import Types
+import Sites.Util (toPipeline)
 
 --
 -- Amya Chronicles - Testing Taggy parsing
@@ -32,7 +33,7 @@ amyaChronicles = Comic
     { comicName = "Amya Chronicles"
     , seedPage = "http://www.amyachronicles.com/archives/comic/09292009"
     , seedType = undefined
-    , pageParse = CallbackParser amyaChroniclesPageParse
+    , pageParse = toPipeline amyaChroniclesPageParse
     }
 
 amyaChroniclesPageParse :: ReplyType t -> IO [FetchType t]

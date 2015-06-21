@@ -27,7 +27,7 @@ gunnerkrigCourt = Comic
     { comicName = "Gunnerkrigg Court"
     , seedPage = "http://www.gunnerkrigg.com/archives/"
     , seedType = undefined
-    , pageParse = CallbackParser gunnerkrigCourtPageParse
+    , pageParse = toPipeline gunnerkrigCourtPageParse
     }
 
 gunnerkrigCourtPageParse :: ReplyType t -> IO [FetchType t]

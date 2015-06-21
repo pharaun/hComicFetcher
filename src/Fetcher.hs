@@ -27,10 +27,9 @@ import qualified Data.ByteString.Lazy as L
 import qualified Data.ByteString.Lazy.UTF8 as UL
 import qualified Data.ByteString.UTF8 as US
 
-import Filesystem (createTree, isFile)
-import Filesystem.Path.CurrentOS ((</>))
-import qualified Filesystem.Path as FP
-import qualified Filesystem.Path.CurrentOS as FPO
+import System.Directory (createDirectoryIfMissing, doesFileExist)
+import System.FilePath ((</>))
+import qualified System.FilePath as FP
 
 import Crypto.Hash (digestToHexByteString, hash, Digest, SHA512)
 
@@ -137,13 +136,13 @@ fetchToDisk :: (
     MonadBaseControl IO m,
     MonadResource m,
     Failure HttpException m
-    ) => Manager -> String -> FPO.FilePath -> m ()
+    ) => Manager -> String -> FP.FilePath -> m ()
 fetchToDisk m url file = do
     -- TODO: Replace this with Network.HTTP.Conduit.Downloader probably for streaming file to disk
     response <- fetchStream m url
 
     -- Let's create the directory tree if it does not exist first
-    liftIO $ createTree $ FP.directory file
+    liftIO $ createDirectoryIfMissing True $ FP.dropFileName file
 
     response $$+- CF.sinkFile file
 
@@ -178,7 +177,7 @@ fetchStream m url = do
     cacheSource url
 
 cacheExists :: String -> IO Bool
-cacheExists = isFile . cacheFile
+cacheExists = doesFileExist . cacheFile
 
 cacheSource :: MonadResource m => String -> m (C.ResumableSource m S.ByteString)
 cacheSource url = do
@@ -190,9 +189,9 @@ cacheSink url = do
     let fp = cacheFile url
 
     -- Let's create the cache if it does not exist.
-    liftIO $ createTree $ FP.directory fp
+    liftIO $ createDirectoryIfMissing True $ FP.dropFileName fp
 
     CF.sinkFile fp
 
-cacheFile :: String -> FPO.FilePath
-cacheFile url = FPO.decodeString "./cache" </> FPO.decode (digestToHexByteString (hash $ US.fromString url :: Digest SHA512))
+cacheFile :: String -> FP.FilePath
+cacheFile url = "./cache" </> US.toString (digestToHexByteString (hash $ US.fromString url :: Digest SHA512))

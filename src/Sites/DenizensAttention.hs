@@ -11,6 +11,7 @@ import Text.HTML.TagSoup.Fast
 
 -- Local imports
 import Types
+import Sites.Util (toPipeline)
 
 -- Tags
 data CTag = Initial -- The initial page
@@ -27,7 +28,7 @@ denizensAttention = Comic
     { comicName = "Denizens Attention"
     , seedPage = rootUrl ++ firstChapter
     , seedType = Initial
-    , pageParse = CallbackParser denizensAttentionPageParse
+    , pageParse = toPipeline denizensAttentionPageParse
     }
 
 denizensAttentionPageParse :: ReplyType CTag -> IO [FetchType CTag]

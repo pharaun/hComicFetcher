@@ -31,7 +31,7 @@ errantStory = Comic
     { comicName = "Errant Story"
     , seedPage = "http://www.errantstory.com"
     , seedType = VolIndex
-    , pageParse = CallbackParser errantStoryPageParse
+    , pageParse = toPipeline errantStoryPageParse
     }
 
 errantStoryPageParse :: ReplyType Tag -> IO [FetchType Tag]

@@ -9,9 +9,8 @@ module Parser.VolChpPrinter
     , formatVersion
     ) where
 
-import Filesystem.Path.CurrentOS ((</>))
-import qualified Filesystem.Path as FP
-import qualified Filesystem.Path.CurrentOS as FPO
+import System.FilePath ((</>))
+import qualified System.FilePath as FP
 
 import Data.Maybe
 
@@ -28,37 +27,37 @@ import Debug.Trace
 data UnitTagType = UnitTagVolume | UnitTagChapter
 
 -- TODO: Find a better home for this
-comicTagToFilePath :: ComicTag -> FPO.FilePath
-comicTagToFilePath ct = traceShow ct $ DL.foldl (</>) (FPO.decodeString "./") (DL.filter (not . FP.null)
+comicTagToFilePath :: ComicTag -> FP.FilePath
+comicTagToFilePath ct = traceShow ct $ DL.foldl (</>) ("./") (DL.filter (not . DL.null)
     -- Site Name
-    [ FPO.fromText (ctSiteName ct)
+    [ T.unpack $ ctSiteName ct
 
     -- Story Name
     , case ctStoryName ct of
-        Nothing -> FP.empty
-        Just x  -> FPO.fromText x
+        Nothing -> ""
+        Just x  -> T.unpack x
 
     -- Volume
     , case ctVolume ct of
-        Nothing -> FP.empty
+        Nothing -> ""
         Just x  -> unitTagToFilePath UnitTagVolume x
 
     -- Chapter
     , case ctChapter ct of
-        Nothing -> FP.empty
+        Nothing -> ""
         Just x  -> unitTagToFilePath UnitTagChapter x
 
     -- TODO: this fromJust is bad news
-    , FPO.fromText (fromJust $ ctFileName ct)
+    , T.unpack $ fromJust $ ctFileName ct
     ])
 
-unitTagToFilePath :: UnitTagType -> UnitTag -> FPO.FilePath
+unitTagToFilePath :: UnitTagType -> UnitTag -> FP.FilePath
 unitTagToFilePath UnitTagVolume ut  = unitTagString (T.pack "Volume ") ut
 unitTagToFilePath UnitTagChapter ut = unitTagString (T.pack "Chapter ") ut
 
 -- TODO: need to add zero padding
-unitTagString :: T.Text -> UnitTag -> FPO.FilePath
-unitTagString s UnitTag{utNumber=issue, utTitle=name} = FPO.fromText (s `T.append` (formatListDigits issue) `T.append` (
+unitTagString :: T.Text -> UnitTag -> FP.FilePath
+unitTagString s UnitTag{utNumber=issue, utTitle=name} = T.unpack (s `T.append` (formatListDigits issue) `T.append` (
     case name of
         Nothing -> T.empty
         Just x  -> T.pack ": " `T.append` x

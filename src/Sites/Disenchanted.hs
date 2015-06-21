@@ -18,6 +18,7 @@ import Control.Applicative (liftA)
 
 -- Local imports
 import Types
+import Sites.Util (toPipeline)
 
 
 --
@@ -27,7 +28,7 @@ disenchanted = Comic
     { comicName = "Disenchanted"
     , seedPage = "http://www.disenchantedcomic.com/webcomic/1"
     , seedType = undefined
-    , pageParse = CallbackParser disenchantedPageParse
+    , pageParse = toPipeline disenchantedPageParse
     }
 
 disenchantedPageParse :: ReplyType t -> IO [FetchType t]

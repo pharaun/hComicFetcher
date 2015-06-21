@@ -14,6 +14,7 @@ import qualified Data.ByteString.UTF8 as US
 
 -- Local imports
 import Types
+import Sites.Util (toPipeline)
 
 --
 -- Does Not Play Well With Others
@@ -22,7 +23,7 @@ doesNotPlayWellWithOthers = Comic
     { comicName = "Does Not Play Well With Others"
     , seedPage = "http://www.doesnotplaywellwithothers.com/comics/pwc-000f"
     , seedType = undefined
-    , pageParse = CallbackParser dnpwwoPageParse
+    , pageParse = toPipeline dnpwwoPageParse
     }
 
 dnpwwoPageParse :: ReplyType t -> IO [FetchType t]

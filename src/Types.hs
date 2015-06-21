@@ -13,7 +13,6 @@ module Types
     , SubDigit(..)
 
     , Comic(..)
-    , ComicParser(..)
 
     , DebugException(..)
     ) where
@@ -155,14 +154,8 @@ data Comic t = Comic
 
     -- Page parser, Parse a page and return a list of stuff to fetch,
     -- Pipeline parser (takes an input stream and output stream of stuff to fetch
-    , pageParse :: ComicParser t
+    , pageParse :: (Pipe (ReplyType t) (FetchType t) IO ())
     }
-
-
--- Comic Parser types
-data ComicParser t = CallbackParser (ReplyType t -> IO [FetchType t])
-                   | PipelineParser (Pipe (ReplyType t) (FetchType t) IO ())
-
 
 
 -- Debugging exceptions - Where, what
