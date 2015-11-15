@@ -15,7 +15,29 @@ executable hComicFetcher
     ghc-options:       -Wall -fno-warn-missing-signatures -rtsopts -threaded
     hs-source-dirs:     src
 
-    build-depends:      base >=4.5 && <4.8
+    other-modules:      Fetcher
+                      , Interpreter
+                      , Types
+                      , Parser.VolChpParser
+                      , Parser.VolChpPrinter
+                      , Parser.Words
+                      , Sites.AmyaChronicles
+                      , Sites.Batoto
+                      , Sites.Comic
+                      , Sites.DenizensAttention
+                      , Sites.Disenchanted
+                      , Sites.DoesNotPlayWellWithOthers
+                      , Sites.ErrantStory
+                      , Sites.ExploitationNow
+                      , Sites.FeyWinds
+                      , Sites.FreakAngels
+                      , Sites.GirlGenius
+                      , Sites.GunnerkrigCourt
+                      , Sites.TryingHuman
+                      , Sites.Util
+
+
+    build-depends:      base >=4.5 && <4.9
                       , HUnit >=1.2.5.2
                       , QuickCheck >=2.8.1
                       , bytestring >=0.10.0.2
