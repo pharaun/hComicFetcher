@@ -24,6 +24,7 @@ girlGenius = Comic
     { comicName = "Girl Genius"
     , seedPage = "http://www.girlgeniusonline.com/comic.php?date=20021104"
     , seedType = undefined
+    , seedCache = Always
     , pageParse = toPipeline girlGeniusPageParse
     , cookies = []
     }
@@ -40,7 +41,7 @@ girlGeniusPageParse (WebpageReply html _) = do
     mapM_ putStrLn img
     mapM_ putStrLn next
 
-    return $ map (\a -> Webpage a undefined) next ++ map (\a -> Image a $ comicFileName vol a) img
+    return $ map (\a -> Webpage a Always undefined) next ++ map (\a -> Image a $ comicFileName vol a) img
 
    where
     nextPage = hasName "td" >>> hasAttrValue "valign" (== "top") //> (hasName "a" </ (hasName "img" >>> hasAttrValue "alt" (== "The Next Comic"))) >>> getAttrValue "href"

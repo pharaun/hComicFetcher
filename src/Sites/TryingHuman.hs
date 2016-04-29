@@ -33,6 +33,7 @@ tryingHuman = Comic
     { comicName = "Trying Human"
     , seedPage = rootUrl ++ "archive.php"
     , seedType = Initial
+    , seedCache = Always
     , pageParse = toPipeline tryingHumanPageParse
     , cookies = []
     }
@@ -84,7 +85,7 @@ buildTreeUrl xs = catMaybes $ snd $ DL.mapAccumL accum (T.pack "", T.pack "", 1)
         | otherwise                                                         = ((vol, chp, pg + 1), Just (toCT vol chp pg $ fromAttrib (T.pack "href") x))
 
 toCT :: T.Text -> T.Text -> Integer -> T.Text -> FetchType CTag
-toCT vol chp pg url = Webpage (T.unpack url) (Page (ComicTag (T.pack "Trying Human") Nothing (Just $ UnitTag [StandAlone $ Digit (parseVol vol) Nothing Nothing Nothing] Nothing) (Just $ UnitTag [StandAlone $ Digit (parseChp chp) Nothing Nothing Nothing] Nothing) Nothing) pg)
+toCT vol chp pg url = Webpage (T.unpack url) Always (Page (ComicTag (T.pack "Trying Human") Nothing (Just $ UnitTag [StandAlone $ Digit (parseVol vol) Nothing Nothing Nothing] Nothing) (Just $ UnitTag [StandAlone $ Digit (parseChp chp) Nothing Nothing Nothing] Nothing) Nothing) pg)
 
 parseVol :: T.Text -> Integer
 parseVol t = wordToNumber $ T.unpack $ T.drop (length "VOLUME ") t

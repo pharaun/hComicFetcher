@@ -28,6 +28,7 @@ disenchanted = Comic
     { comicName = "Disenchanted"
     , seedPage = "http://www.disenchantedcomic.com/webcomic/1"
     , seedType = undefined
+    , seedCache = Always
     , pageParse = toPipeline disenchantedPageParse
     , cookies = []
     }
@@ -75,7 +76,7 @@ disenchantedPageParse (WebpageReply pg _) = do
     case parseTitle name image of
         Left _          -> return []
         Right (ct, nEp) -> return [ Image (T.unpack image) ct
-                                  , Webpage (T.unpack (if nEp then nextEp else next)) undefined
+                                  , Webpage (T.unpack (if nEp then nextEp else next)) Always undefined
                                   ]
 
 

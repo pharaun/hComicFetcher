@@ -29,6 +29,7 @@ feyWinds = Comic
     { comicName = "Fey Winds"
     , seedPage = rootPage ++ "comic.html"
     , seedType = undefined
+    , seedCache = Always
     , pageParse = feyWindsProxy
     , cookies = []
     }
@@ -59,7 +60,7 @@ feyWindsProxy = runWebFetchT $ do
     forM_ pages (\(url, ct) -> do
         debug "Parsing image page"
         debug url
-        page <- parseTagsT . BL.toStrict <$> fetchWebpage [rootPage ++ url]
+        page <- parseTagsT . BL.toStrict <$> fetchWebpage [(rootPage ++ url, Always)]
 
         let img =
                 fromAttrib (T.pack "src") $

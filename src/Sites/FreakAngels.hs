@@ -35,6 +35,7 @@ freakAngels = Comic
     { comicName = "Freak Angels"
     , seedPage = "http://www.freakangels.com"
     , seedType = Initial
+    , seedCache = Always
     , pageParse = toPipeline freakAngelsPageParse
     , cookies = []
     }
@@ -97,7 +98,7 @@ freakAngelsPageParse (WebpageReply pg (BookEpisode page1 ct)) = do
     putStrLn "Parsing Pages"
     print pages
     putStrLn ""
-    return $ map (\url -> Webpage (US.toString url) $ Page ct) pages'
+    return $ map (\url -> Webpage (US.toString url) Always $ Page ct) pages'
 
 freakAngelsPageParse (WebpageReply pg (Page ct)) = do
     let page = BL.toStrict pg
@@ -135,17 +136,17 @@ urlAndName (Element _ a c) = case lookup "href" a of
 
 -- TODO clean this up more nicely (Using my Text to number parsing)
 bookNameToComicTag :: (US.ByteString, US.ByteString) -> FetchType Tag
-bookNameToComicTag ("Visual Archive: Book One", url) = Webpage (US.toString url) (Book False $ ComicTag "Freak Angels" Nothing (Just $ UnitTag [StandAlone $ Digit 1 Nothing Nothing Nothing] Nothing) Nothing Nothing)
-bookNameToComicTag ("Visual Archive: Book Two", url) = Webpage (US.toString url) (Book False $ ComicTag "Freak Angels" Nothing (Just $ UnitTag [StandAlone $ Digit 2 Nothing Nothing Nothing] Nothing) Nothing Nothing)
-bookNameToComicTag ("Visual Archive: Book Three", url) = Webpage (US.toString url) (Book False $ ComicTag "Freak Angels" Nothing (Just $ UnitTag [StandAlone $ Digit 3 Nothing Nothing Nothing] Nothing) Nothing Nothing)
-bookNameToComicTag ("Visual Archive: Book Four", url) = Webpage (US.toString url) (Book False $ ComicTag "Freak Angels" Nothing (Just $ UnitTag [StandAlone $ Digit 4 Nothing Nothing Nothing] Nothing) Nothing Nothing)
-bookNameToComicTag ("Visual Archive: Book Five", url) = Webpage (US.toString url) (Book False $ ComicTag "Freak Angels" Nothing (Just $ UnitTag [StandAlone $ Digit 5 Nothing Nothing Nothing] Nothing) Nothing Nothing)
-bookNameToComicTag ("Visual Archive: Book Six", url) = Webpage (US.toString url) (Book False $ ComicTag "Freak Angels" Nothing (Just $ UnitTag [StandAlone $ Digit 6 Nothing Nothing Nothing] Nothing) Nothing Nothing)
-bookNameToComicTag (name, url) = Webpage (US.toString url) (Book True $ ComicTag "Freak Angels" Nothing (Just $ UnitTag [] $ Just $ TE.decodeUtf8 name) Nothing Nothing)
+bookNameToComicTag ("Visual Archive: Book One", url) = Webpage (US.toString url) Always (Book False $ ComicTag "Freak Angels" Nothing (Just $ UnitTag [StandAlone $ Digit 1 Nothing Nothing Nothing] Nothing) Nothing Nothing)
+bookNameToComicTag ("Visual Archive: Book Two", url) = Webpage (US.toString url) Always (Book False $ ComicTag "Freak Angels" Nothing (Just $ UnitTag [StandAlone $ Digit 2 Nothing Nothing Nothing] Nothing) Nothing Nothing)
+bookNameToComicTag ("Visual Archive: Book Three", url) = Webpage (US.toString url) Always (Book False $ ComicTag "Freak Angels" Nothing (Just $ UnitTag [StandAlone $ Digit 3 Nothing Nothing Nothing] Nothing) Nothing Nothing)
+bookNameToComicTag ("Visual Archive: Book Four", url) = Webpage (US.toString url) Always (Book False $ ComicTag "Freak Angels" Nothing (Just $ UnitTag [StandAlone $ Digit 4 Nothing Nothing Nothing] Nothing) Nothing Nothing)
+bookNameToComicTag ("Visual Archive: Book Five", url) = Webpage (US.toString url) Always (Book False $ ComicTag "Freak Angels" Nothing (Just $ UnitTag [StandAlone $ Digit 5 Nothing Nothing Nothing] Nothing) Nothing Nothing)
+bookNameToComicTag ("Visual Archive: Book Six", url) = Webpage (US.toString url) Always (Book False $ ComicTag "Freak Angels" Nothing (Just $ UnitTag [StandAlone $ Digit 6 Nothing Nothing Nothing] Nothing) Nothing Nothing)
+bookNameToComicTag (name, url) = Webpage (US.toString url) Always (Book True $ ComicTag "Freak Angels" Nothing (Just $ UnitTag [] $ Just $ TE.decodeUtf8 name) Nothing Nothing)
 
 
 -- Title, url
 bookEpisodeToComicTag :: ComicTag -> (US.ByteString, US.ByteString) -> FetchType Tag
-bookEpisodeToComicTag ct (title, url) = Webpage (US.toString url) (BookEpisode url $ ct{ctChapter = Just $ UnitTag [StandAlone $ Digit (parseDigit title) Nothing Nothing Nothing] Nothing})
+bookEpisodeToComicTag ct (title, url) = Webpage (US.toString url) Always (BookEpisode url $ ct{ctChapter = Just $ UnitTag [StandAlone $ Digit (parseDigit title) Nothing Nothing Nothing] Nothing})
   where
     parseDigit t = read $ US.toString $ BS.reverse $ BS.take 4 $ BS.reverse t

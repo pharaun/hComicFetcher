@@ -27,6 +27,7 @@ gunnerkrigCourt = Comic
     { comicName = "Gunnerkrigg Court"
     , seedPage = "http://www.gunnerkrigg.com/archives/"
     , seedType = undefined
+    , seedCache = Always
     , pageParse = toPipeline gunnerkrigCourtPageParse
     , cookies = []
     }

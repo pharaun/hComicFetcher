@@ -81,8 +81,8 @@ fetcher :: (
     MonadResource m,
     Failure HttpException m
     ) => [CH.Cookie] -> Manager -> FetchType a -> m (Maybe (ReplyType a))
-fetcher c m (Webpage u t) = do
-    reply <- fetchSource c m u
+fetcher c m (Webpage u cached t) = do
+    reply <- fetchSource c m cached u
     return $ Just (WebpageReply reply t)
 fetcher c m (Image u f) = do
     -- Stream to disk
@@ -95,9 +95,9 @@ fetchSource :: (
     MonadBaseControl IO m,
     MonadResource m,
     Failure HttpException m
-    ) => [CH.Cookie] -> Manager -> String -> m UL.ByteString
-fetchSource c m url = do
-    response <- fetchStream c m url
+    ) => [CH.Cookie] -> Manager -> Cached -> String -> m UL.ByteString
+fetchSource c m cached url = do
+    response <- fetchStream c m cached url
     chunk <- response $$+- CL.consume
     return $ L.fromChunks chunk
 
@@ -109,7 +109,7 @@ fetchToDisk :: (
     ) => [CH.Cookie] -> Manager -> String -> FP.FilePath -> m ()
 fetchToDisk c m url file = do
     -- TODO: Replace this with Network.HTTP.Conduit.Downloader probably for streaming file to disk
-    response <- fetchStream c m url
+    response <- fetchStream c m Always url
 
     -- Let's create the directory tree if it does not exist first
     liftIO $ createDirectoryIfMissing True $ FP.dropFileName file
@@ -121,8 +121,8 @@ fetchStream :: (
     MonadBaseControl IO m,
     MonadResource m,
     Failure HttpException m
-    ) => [CH.Cookie] -> Manager -> String -> m (C.ResumableSource m S.ByteString)
-fetchStream c m url = do
+    ) => [CH.Cookie] -> Manager -> Cached -> String -> m (C.ResumableSource m S.ByteString)
+fetchStream c m cached url = do
     req' <- liftIO $ CH.parseUrl url
 
     -- TODO: remove the batoto special case
@@ -133,6 +133,7 @@ fetchStream c m url = do
     --  2. Return cached value if any exists, otherwise
     --  3. Fetch the http request then stream it to the cache
     --  4. Return cached value
+    --  cached <-
 
     exists <- liftIO $ cacheExists url
     CM.unless exists $ do

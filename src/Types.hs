@@ -1,6 +1,7 @@
 {-# LANGUAGE Rank2Types, DeriveDataTypeable #-}
 module Types
     ( Url
+    , Cached(..)
     , FetchType(..)
     , ReplyType(..)
 
@@ -25,6 +26,7 @@ import Data.Typeable
 import Pipes
 
 import qualified Network.HTTP.Conduit as CH
+import Data.Time.Clock
 
 -- Filesystem format - SiteName/StoryName/Volume/Chapter/Page.*
 --
@@ -105,7 +107,12 @@ type Url = String
 data ReplyType a = WebpageReply UL.ByteString a
     deriving (Show)
 
-data FetchType a = Webpage Url a
+data Cached = Never | Always | Future UTCTime
+    deriving (Show)
+
+-- TODO: define caching policy
+--  - For now caching is defined always by the caller
+data FetchType a = Webpage Url Cached a
                  | Image Url ComicTag -- TODO: this is probably wrong type - We probably want FPO.FilePath
 
 
@@ -153,6 +160,7 @@ data Comic t = Comic
     -- Seed page/type for kickstarting the parser/fetcher
     , seedPage :: String
     , seedType :: t -- TAG
+    , seedCache :: Cached
 
     -- Page parser, Parse a page and return a list of stuff to fetch,
     -- Pipeline parser (takes an input stream and output stream of stuff to fetch

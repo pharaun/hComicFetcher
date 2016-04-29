@@ -37,6 +37,7 @@ batoto = Comic
     { comicName = "Batoto"
     , seedPage = error "Please specify a Batoto comic."
     , seedType = Index
+    , seedCache = Always
     , pageParse = toPipeline batotoPageParse
     , cookies = [batotoCookie]
     }
@@ -56,7 +57,7 @@ batotoPageParse (WebpageReply html Index) = do
 
     -- Parse the Vol/Chp
     let next = map (\(a, b) -> (a, volChpParse "batoto" (headMay story) b)) volChpPageP
-    return $ map (\(a, b) -> Webpage a (FirstPage b)) next
+    return $ map (\(a, b) -> Webpage a Always (FirstPage b)) next
 
    where
     storyName = hasName "h1" >>> hasAttrValue "class" ((==) "ipsType_pagetitle") /> getText >>> arr textStrip
@@ -88,7 +89,7 @@ batotoPageParse (WebpageReply html (FirstPage ct)) = do
     putStrLn "Next pages"
     mapM_ print otherPagesP
 
-    return $ map (\a -> Webpage a (Page ct)) otherPagesP ++ map (\a -> Image a $ comicTagFileName ct a) img
+    return $ map (\a -> Webpage a Always (Page ct)) otherPagesP ++ map (\a -> Image a $ comicTagFileName ct a) img
 
    where
     otherPages =

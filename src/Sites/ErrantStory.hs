@@ -31,6 +31,7 @@ errantStory = Comic
     { comicName = "Errant Story"
     , seedPage = "http://www.errantstory.com"
     , seedType = VolIndex
+    , seedCache = Always
     , pageParse = toPipeline errantStoryPageParse
     , cookies = []
     }
@@ -48,7 +49,7 @@ errantStoryPageParse (WebpageReply html VolIndex) = do
     putStrLn "Chp list:"
     mapM_ print list
 
-    return $ map (\(u, p) -> Webpage u (Chapter p)) list
+    return $ map (\(u, p) -> Webpage u Always (Chapter p)) list
 
   where
     indexList =
@@ -103,7 +104,7 @@ errantStoryPageParse (WebpageReply html (Chapter ct)) = do
 
     -- TODO:
     --  1. Do something with the name of the page (Chapter 42: foobar) (not on all pages unfortunately)
-    return $ map (\a -> Webpage a (Chapter ct)) next ++ map (\a -> Webpage (fst a) (Page ct)) chp
+    return $ map (\a -> Webpage a Always (Chapter ct)) next ++ map (\a -> Webpage (fst a) Always (Page ct)) chp
 
    where
     chapterList =

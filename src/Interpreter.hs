@@ -20,7 +20,7 @@ import Types
 
 data WebFetchI a where
     FetchSeedpage :: WebFetchI UL.ByteString
-    FetchWebpage :: [Url] -> WebFetchI UL.ByteString
+    FetchWebpage :: [(Url, Cached)] -> WebFetchI UL.ByteString
     FetchImage :: Url -> ComicTag -> WebFetchI ()
     Debug :: (Show s) => s -> WebFetchI ()
 
@@ -37,7 +37,7 @@ runWebFetchT = eval <=< viewT
         await >>= (\(WebpageReply b _) -> runWebFetchT (k b))
 
     eval (FetchWebpage us :>>= k) =
-        forM_ us (\u -> (yield (Webpage u undefined)) >> await >>= \(WebpageReply b _) -> runWebFetchT (k b))
+        forM_ us (\(u, c) -> (yield (Webpage u c undefined)) >> await >>= \(WebpageReply b _) -> runWebFetchT (k b))
 
     eval (FetchImage u ct :>>= k) =
         (yield (Image u ct)) >> runWebFetchT (k ())
@@ -48,7 +48,7 @@ runWebFetchT = eval <=< viewT
 fetchSeedpage :: WebFetchT m UL.ByteString
 fetchSeedpage = singleton FetchSeedpage
 
-fetchWebpage :: [Url] -> WebFetchT m UL.ByteString
+fetchWebpage :: [(Url, Cached)] -> WebFetchT m UL.ByteString
 fetchWebpage = singleton . FetchWebpage
 
 fetchImage :: Url -> ComicTag -> WebFetchT m ()

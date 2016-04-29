@@ -33,6 +33,7 @@ amyaChronicles = Comic
     { comicName = "Amya Chronicles"
     , seedPage = "http://www.amyachronicles.com/archives/comic/09292009"
     , seedType = undefined
+    , seedCache = Always
     , pageParse = toPipeline amyaChroniclesPageParse
     , cookies = []
     }
@@ -64,8 +65,8 @@ amyaChroniclesPageParse (WebpageReply pg _) = do
 
     -- Parse the title and create the tag.
     case parseTitle name img of
-        Left _  -> return $ map (\url -> Webpage (T.unpack url) undefined) $ maybeToList next
-        Right x -> return $ [Image (T.unpack img) x] ++ (map (\url -> Webpage (T.unpack url) undefined) $ maybeToList next)
+        Left _  -> return $ map (\url -> Webpage (T.unpack url) Always undefined) $ maybeToList next
+        Right x -> return $ [Image (T.unpack img) x] ++ (map (\url -> Webpage (T.unpack url) Always undefined) $ maybeToList next)
 
     -- Fetching next page
 

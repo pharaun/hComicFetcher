@@ -28,6 +28,7 @@ denizensAttention = Comic
     { comicName = "Denizens Attention"
     , seedPage = rootUrl ++ firstChapter
     , seedType = Initial
+    , seedCache = Always
     , pageParse = toPipeline denizensAttentionPageParse
     , cookies = []
     }
@@ -83,7 +84,7 @@ denizensAttentionPageParse (WebpageReply pg (Page ct)) = do
 
 
 toChp :: (Integer, T.Text) -> FetchType CTag
-toChp (chp, url) = Webpage (rootUrl ++ T.unpack url) (Chp $ ComicTag (T.pack "Denizens Attention") Nothing Nothing (Just $ UnitTag [StandAlone $ Digit chp Nothing Nothing Nothing] Nothing) Nothing)
+toChp (chp, url) = Webpage (rootUrl ++ T.unpack url) Always (Chp $ ComicTag (T.pack "Denizens Attention") Nothing Nothing (Just $ UnitTag [StandAlone $ Digit chp Nothing Nothing Nothing] Nothing) Nothing)
 
 toPage :: ComicTag -> (Integer, T.Text) -> FetchType CTag
-toPage ct (page, url) = Webpage (rootUrl ++ T.unpack url) (Page ct{ctFileName = Just $ T.justifyRight 7 '0' $ T.pack (show page ++ ".png")})
+toPage ct (page, url) = Webpage (rootUrl ++ T.unpack url) Always (Page ct{ctFileName = Just $ T.justifyRight 7 '0' $ T.pack (show page ++ ".png")})
