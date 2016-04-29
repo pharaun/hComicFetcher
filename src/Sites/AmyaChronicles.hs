@@ -34,6 +34,7 @@ amyaChronicles = Comic
     , seedPage = "http://www.amyachronicles.com/archives/comic/09292009"
     , seedType = undefined
     , pageParse = toPipeline amyaChroniclesPageParse
+    , cookies = []
     }
 
 amyaChroniclesPageParse :: ReplyType t -> IO [FetchType t]

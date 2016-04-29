@@ -29,6 +29,7 @@ disenchanted = Comic
     , seedPage = "http://www.disenchantedcomic.com/webcomic/1"
     , seedType = undefined
     , pageParse = toPipeline disenchantedPageParse
+    , cookies = []
     }
 
 disenchantedPageParse :: ReplyType t -> IO [FetchType t]

@@ -35,9 +35,6 @@ import Crypto.Hash (digestToHexByteString, hash, Digest, SHA512)
 
 import qualified Data.List as DL
 
-import Data.Time.Clock
-import Data.Time.Calendar
-
 
 -- Local types
 import Types
@@ -48,43 +45,16 @@ import Parser.VolChpPrinter
 fetchWaitTime :: Int
 fetchWaitTime = 1
 
---
--- Custom cookie jar for Batoto to only display english
---
--- TODO: Create a way for us to have per site rules for (auth/cookies/etc)
-past :: UTCTime
-past = UTCTime (ModifiedJulianDay 56000) (secondsToDiffTime 0) -- 2012-03-14
-
-future :: UTCTime
-future = UTCTime (ModifiedJulianDay 60000) (secondsToDiffTime 0) -- 2023-02-25
-
-batotoCookie :: CH.Cookie
-batotoCookie = CH.Cookie
-    { CH.cookie_name   = US.fromString "lang_option"
-    , CH.cookie_value  = US.fromString "English"
-    , CH.cookie_domain = US.fromString ".batoto.net"
-    , CH.cookie_path   = US.fromString "/"
-
-    , CH.cookie_expiry_time = future
-    , CH.cookie_creation_time = past
-    , CH.cookie_last_access_time = past
-
-    , CH.cookie_persistent = True
-    , CH.cookie_host_only = False
-    , CH.cookie_secure_only = False
-    , CH.cookie_http_only = False
-    }
-
 
 
 -- TODO: restart if the exception kills -- main.hs: InvalidUrlException "/ggmain/doublespreads/extrabits/Gil.jpg" "Invalid URL"
-fetch :: TBMChan (FetchType a) -> TBMChan (ReplyType a) -> IO ()
-fetch i o = withSocketsDo $ E.bracket
+fetch :: [CH.Cookie] -> TBMChan (FetchType a) -> TBMChan (ReplyType a) -> IO ()
+fetch c i o = withSocketsDo $ E.bracket
     (CH.newManager CH.conduitManagerSettings)
     CH.closeManager
     (\manager ->
         -- Forever loop (probably don't need the forever at all)
-        CM.forever $ runResourceT $ conduitFetcher manager i o
+        CM.forever $ runResourceT $ conduitFetcher c manager i o
     )
 
 
@@ -94,29 +64,29 @@ conduitFetcher :: (
     MonadBaseControl IO m,
     MonadResource m,
     Failure HttpException m
-    ) => Manager -> TBMChan (FetchType a) -> TBMChan (ReplyType a) -> m ()
-conduitFetcher m i o = CT.sourceTBMChan i $= CL.mapMaybeM (fetcher m) $$ CT.sinkTBMChan o True
+    ) => [CH.Cookie] -> Manager -> TBMChan (FetchType a) -> TBMChan (ReplyType a) -> m ()
+conduitFetcher c m i o = CT.sourceTBMChan i $= CL.mapMaybeM (fetcher c m) $$ CT.sinkTBMChan o True
 
 
 conduitFetcherList :: (
     MonadBaseControl IO m,
     MonadResource m,
     Failure HttpException m
-    ) => Manager -> [FetchType a] -> m [ReplyType a]
-conduitFetcherList m i = CL.sourceList i $= CL.mapMaybeM (fetcher m) $$ CL.consume
+    ) => [CH.Cookie] -> Manager -> [FetchType a] -> m [ReplyType a]
+conduitFetcherList c m i = CL.sourceList i $= CL.mapMaybeM (fetcher c m) $$ CL.consume
 
 
 fetcher :: (
     MonadBaseControl IO m,
     MonadResource m,
     Failure HttpException m
-    ) => Manager -> FetchType a -> m (Maybe (ReplyType a))
-fetcher m (Webpage u t) = do
-    reply <- fetchSource m u
+    ) => [CH.Cookie] -> Manager -> FetchType a -> m (Maybe (ReplyType a))
+fetcher c m (Webpage u t) = do
+    reply <- fetchSource c m u
     return $ Just (WebpageReply reply t)
-fetcher m (Image u f) = do
+fetcher c m (Image u f) = do
     -- Stream to disk
-    fetchToDisk m u (comicTagToFilePath f)
+    fetchToDisk c m u (comicTagToFilePath f)
     return Nothing
 
 
@@ -125,9 +95,9 @@ fetchSource :: (
     MonadBaseControl IO m,
     MonadResource m,
     Failure HttpException m
-    ) => Manager -> String -> m UL.ByteString
-fetchSource m url = do
-    response <- fetchStream m url
+    ) => [CH.Cookie] -> Manager -> String -> m UL.ByteString
+fetchSource c m url = do
+    response <- fetchStream c m url
     chunk <- response $$+- CL.consume
     return $ L.fromChunks chunk
 
@@ -136,10 +106,10 @@ fetchToDisk :: (
     MonadBaseControl IO m,
     MonadResource m,
     Failure HttpException m
-    ) => Manager -> String -> FP.FilePath -> m ()
-fetchToDisk m url file = do
+    ) => [CH.Cookie] -> Manager -> String -> FP.FilePath -> m ()
+fetchToDisk c m url file = do
     -- TODO: Replace this with Network.HTTP.Conduit.Downloader probably for streaming file to disk
-    response <- fetchStream m url
+    response <- fetchStream c m url
 
     -- Let's create the directory tree if it does not exist first
     liftIO $ createDirectoryIfMissing True $ FP.dropFileName file
@@ -151,14 +121,12 @@ fetchStream :: (
     MonadBaseControl IO m,
     MonadResource m,
     Failure HttpException m
-    ) => Manager -> String -> m (C.ResumableSource m S.ByteString)
-fetchStream m url = do
+    ) => [CH.Cookie] -> Manager -> String -> m (C.ResumableSource m S.ByteString)
+fetchStream c m url = do
     req' <- liftIO $ CH.parseUrl url
 
     -- TODO: remove the batoto special case
-    let req =   if "batoto" `DL.isInfixOf` url
-                then req' { CH.checkStatus = \_ _ _ -> Nothing, CH.cookieJar = Just $ CH.createCookieJar [batotoCookie] }
-                else req' { CH.checkStatus = \_ _ _ -> Nothing }
+    let req = req' { CH.checkStatus = \_ _ _ -> Nothing, CH.cookieJar = Just $ CH.createCookieJar c }
 
     -- Caching hook here
     --  1. Check for cache value

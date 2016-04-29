@@ -24,6 +24,7 @@ doesNotPlayWellWithOthers = Comic
     , seedPage = "http://www.doesnotplaywellwithothers.com/comics/pwc-000f"
     , seedType = undefined
     , pageParse = toPipeline dnpwwoPageParse
+    , cookies = []
     }
 
 dnpwwoPageParse :: ReplyType t -> IO [FetchType t]

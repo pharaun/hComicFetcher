@@ -28,6 +28,7 @@ gunnerkrigCourt = Comic
     , seedPage = "http://www.gunnerkrigg.com/archives/"
     , seedType = undefined
     , pageParse = toPipeline gunnerkrigCourtPageParse
+    , cookies = []
     }
 
 gunnerkrigCourtPageParse :: ReplyType t -> IO [FetchType t]

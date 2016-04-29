@@ -24,6 +24,8 @@ import Control.Exception
 import Data.Typeable
 import Pipes
 
+import qualified Network.HTTP.Conduit as CH
+
 -- Filesystem format - SiteName/StoryName/Volume/Chapter/Page.*
 --
 -- Other stuff - webcomic
@@ -155,6 +157,9 @@ data Comic t = Comic
     -- Page parser, Parse a page and return a list of stuff to fetch,
     -- Pipeline parser (takes an input stream and output stream of stuff to fetch
     , pageParse :: (Pipe (ReplyType t) (FetchType t) IO ())
+
+    -- Cookies
+    , cookies :: [CH.Cookie]
     }
 
 

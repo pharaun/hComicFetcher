@@ -34,6 +34,7 @@ tryingHuman = Comic
     , seedPage = rootUrl ++ "archive.php"
     , seedType = Initial
     , pageParse = toPipeline tryingHumanPageParse
+    , cookies = []
     }
 
 tryingHumanPageParse :: ReplyType CTag -> IO [FetchType CTag]

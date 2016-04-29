@@ -75,7 +75,7 @@ main = do
 -- Backward Compat parser target
 --
 pipelineTarget :: Comic a -> IO ()
-pipelineTarget Comic{seedPage=seedPage', seedType=seedType', pageParse=parse} = do
+pipelineTarget Comic{seedPage=seedPage', seedType=seedType', pageParse=parse, cookies=cookie} = do
     -- Queues for processing stuff
     -- TODO: look into tweaking this and making the indexed parser not deadlock the whole thing... if there's more to add to the queue than can be processed
     toFetch <- atomically $ newTBMChan 10000
@@ -85,7 +85,7 @@ pipelineTarget Comic{seedPage=seedPage', seedType=seedType', pageParse=parse} = 
     atomically $ writeTBMChan toFetch $ Webpage seedPage' seedType'
 
     -- Start the fetcher
-    threadId <- forkIO $ fetch toFetch toReturn
+    threadId <- forkIO $ fetch cookie toFetch toReturn
 
     -- Pipeline parser
     runEffect $ (chanProducer toReturn) >-> parse >-> (chanConsumer toFetch)

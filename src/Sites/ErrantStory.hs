@@ -32,6 +32,7 @@ errantStory = Comic
     , seedPage = "http://www.errantstory.com"
     , seedType = VolIndex
     , pageParse = toPipeline errantStoryPageParse
+    , cookies = []
     }
 
 errantStoryPageParse :: ReplyType Tag -> IO [FetchType Tag]

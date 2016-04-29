@@ -29,6 +29,7 @@ denizensAttention = Comic
     , seedPage = rootUrl ++ firstChapter
     , seedType = Initial
     , pageParse = toPipeline denizensAttentionPageParse
+    , cookies = []
     }
 
 denizensAttentionPageParse :: ReplyType CTag -> IO [FetchType CTag]

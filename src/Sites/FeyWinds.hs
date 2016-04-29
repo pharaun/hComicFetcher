@@ -30,6 +30,7 @@ feyWinds = Comic
     , seedPage = rootPage ++ "comic.html"
     , seedType = undefined
     , pageParse = feyWindsProxy
+    , cookies = []
     }
 
 

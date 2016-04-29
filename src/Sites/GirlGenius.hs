@@ -25,6 +25,7 @@ girlGenius = Comic
     , seedPage = "http://www.girlgeniusonline.com/comic.php?date=20021104"
     , seedType = undefined
     , pageParse = toPipeline girlGeniusPageParse
+    , cookies = []
     }
 
 girlGeniusPageParse :: ReplyType t -> IO [FetchType t]

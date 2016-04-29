@@ -36,6 +36,7 @@ freakAngels = Comic
     , seedPage = "http://www.freakangels.com"
     , seedType = Initial
     , pageParse = toPipeline freakAngelsPageParse
+    , cookies = []
     }
 
 freakAngelsPageParse :: ReplyType Tag -> IO [FetchType Tag]
