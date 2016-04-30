@@ -28,14 +28,13 @@ rootPage = "http://feywinds.com/"
 feyWinds = Comic
     { comicName = "Fey Winds"
     , seedPage = rootPage ++ "comic.html"
-    , seedType = undefined
     , seedCache = Always
     , pageParse = feyWindsProxy
     , cookies = []
     }
 
 
-feyWindsProxy :: Pipe (ReplyType t) (FetchType t) IO ()
+feyWindsProxy :: Pipe ReplyType FetchType IO ()
 feyWindsProxy = runWebFetchT $ do
     debug "Parsing index page"
     idx <- parseTagsT . BL.toStrict <$> fetchSeedpage

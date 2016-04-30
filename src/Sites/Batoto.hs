@@ -15,9 +15,14 @@ import qualified Network.HTTP.Conduit as CH
 import Data.Time.Clock
 import Data.Time.Calendar
 
+import Control.Monad
+import Control.Monad.IO.Class
+import Pipes (Pipe)
+
 -- Local imports
 import Types
 import Sites.Util
+import Interpreter
 
 -- Tagsoup
 import Text.XML.HXT.TagSoup
@@ -25,41 +30,72 @@ import Text.XML.HXT.TagSoup
 -- Safehead
 import Safe
 
-
-data Tag = Index              -- Volume/Chapter Index page
-         | FirstPage ComicTag -- First page (fetch the list of pages)
-         | Page ComicTag      -- Each single page to be fetched
-
 --
 -- Batoto
 --
 batoto = Comic
     { comicName = "Batoto"
     , seedPage = error "Please specify a Batoto comic."
-    , seedType = Index
     , seedCache = Always
-    , pageParse = toPipeline batotoPageParse
+    , pageParse = batotoPageParse
     , cookies = [batotoCookie]
     }
 
-batotoPageParse :: ReplyType Tag -> IO [FetchType Tag]
-batotoPageParse (WebpageReply html Index) = do
+batotoPageParse :: Pipe ReplyType FetchType IO ()
+batotoPageParse = runWebFetchT $ do
+    debug "Parsing index page"
+    html <- fetchSeedpage
+
     let doc = readString [withParseHTML yes, withWarnings no, withTagSoup] $ UL.toString html
-    story <- runX $ doc //> storyName
-    volChpPageP <- runX $ doc //> volChpPage
+    story <- liftIO (runX $ doc //> storyName)
+    volChpPageP <- liftIO (runX $ doc //> volChpPage)
 
     -- Do we have any comic we want to store to disk?
-    putStrLn "Story"
-    mapM_ print story
+    debug "Story"
+    mapM_ (liftIO . print) story
 
-    putStrLn "Vol Chp Pages"
-    mapM_ print volChpPageP
+    debug "Vol Chp Pages"
+    mapM_ (liftIO . print) volChpPageP
 
     -- Parse the Vol/Chp
     let next = map (\(a, b) -> (a, volChpParse "batoto" (headMay story) b)) volChpPageP
-    return $ map (\(a, b) -> Webpage a Always (FirstPage b)) next
 
-   where
+    debug "Parse First Page"
+    forM_ next (\(url, ct) -> do
+        debug url
+        html <- fetchWebpage [(url, Always)]
+
+        let doc = readString [withParseHTML yes, withWarnings no, withTagSoup] $ UL.toString html
+        img <- liftIO (runX $ doc //> comic)
+        otherPagesP <- liftIO (runX $ doc >>> otherPages)
+
+        -- Do we have any comic we want to store to disk?
+        debug "img url"
+        mapM_ (liftIO . print) img
+
+        debug "Next pages"
+        mapM_ (liftIO . print) otherPagesP
+
+        debug "Fetch image"
+        forM_ img (\url' -> fetchImage url' (comicTagFileName ct url'))
+
+        debug "Fetch next pages"
+        forM_ otherPagesP (\url' -> do
+            debug url
+            html <- fetchWebpage [(url', Always)]
+
+            let doc = readString [withParseHTML yes, withWarnings no, withTagSoup] $ UL.toString html
+            img <- liftIO (runX $ doc //> comic)
+
+            -- Do we have any comic we want to store to disk?
+            debug "img url"
+            mapM_ (liftIO . print) img
+
+            forM_ img (\url'' -> fetchImage url'' (comicTagFileName ct url''))
+            )
+        )
+
+  where
     storyName = hasName "h1" >>> hasAttrValue "class" ((==) "ipsType_pagetitle") /> getText >>> arr textStrip
 
     volChpPage =
@@ -77,21 +113,6 @@ batotoPageParse (WebpageReply html Index) = do
     textStrip :: String -> String
     textStrip = T.unpack . T.strip . T.pack
 
-batotoPageParse (WebpageReply html (FirstPage ct)) = do
-    let doc = readString [withParseHTML yes, withWarnings no, withTagSoup] $ UL.toString html
-    img <- runX $ doc //> comic
-    otherPagesP <- runX $ doc >>> otherPages
-
-    -- Do we have any comic we want to store to disk?
-    putStrLn "img url"
-    mapM_ print img
-
-    putStrLn "Next pages"
-    mapM_ print otherPagesP
-
-    return $ map (\a -> Webpage a Always (Page ct)) otherPagesP ++ map (\a -> Image a $ comicTagFileName ct a) img
-
-   where
     otherPages =
         (getChildren
         //> hasName "select"
@@ -103,16 +124,6 @@ batotoPageParse (WebpageReply html (FirstPage ct)) = do
         >>> getChildren
         >>> hasName "option"
         >>> ifA (hasAttr "selected") none (getAttrValue "value")
-
-batotoPageParse (WebpageReply html (Page ct)) = do
-    let doc = readString [withParseHTML yes, withWarnings no, withTagSoup] $ UL.toString html
-    img <- runX $ doc //> comic
-
-    -- Do we have any comic we want to store to disk?
-    putStrLn "img url"
-    mapM_ print img
-
-    return $ map (\a -> Image a $ comicTagFileName ct a) img
 
 comic = hasName "img" >>> hasAttrValue "id" ((==) "comic_page") >>> getAttrValue "src"
 comicTagFileName ct url = ct{ctFileName = Just $ last $ decodePathSegments $ US.fromString url}

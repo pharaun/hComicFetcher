@@ -32,14 +32,13 @@ import Sites.Util (toPipeline)
 amyaChronicles = Comic
     { comicName = "Amya Chronicles"
     , seedPage = "http://www.amyachronicles.com/archives/comic/09292009"
-    , seedType = undefined
     , seedCache = Always
     , pageParse = toPipeline amyaChroniclesPageParse
     , cookies = []
     }
 
-amyaChroniclesPageParse :: ReplyType t -> IO [FetchType t]
-amyaChroniclesPageParse (WebpageReply pg _) = do
+amyaChroniclesPageParse :: ReplyType -> IO [FetchType]
+amyaChroniclesPageParse (WebpageReply pg) = do
     let text = foldl (\c (a, b) -> TL.replace a b c) (TLE.decodeUtf8With lenientDecode pg)
             [ (">>", ">&gt;")
             , ("<<", "^lt;<")
@@ -65,8 +64,8 @@ amyaChroniclesPageParse (WebpageReply pg _) = do
 
     -- Parse the title and create the tag.
     case parseTitle name img of
-        Left _  -> return $ map (\url -> Webpage (T.unpack url) Always undefined) $ maybeToList next
-        Right x -> return $ [Image (T.unpack img) x] ++ (map (\url -> Webpage (T.unpack url) Always undefined) $ maybeToList next)
+        Left _  -> return $ map (\url -> Webpage (T.unpack url) Always) $ maybeToList next
+        Right x -> return $ [Image (T.unpack img) x] ++ (map (\url -> Webpage (T.unpack url) Always) $ maybeToList next)
 
     -- Fetching next page
 

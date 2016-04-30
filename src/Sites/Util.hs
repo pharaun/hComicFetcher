@@ -26,7 +26,7 @@ filterAny [] [] = []
 filterAny [] xs = xs
 filterAny xs ys = filter (or . flip map xs . flip id) ys
 
-toPipeline :: (ReplyType t -> IO [FetchType t]) -> Pipe (ReplyType t) (FetchType t) IO ()
+toPipeline :: (ReplyType -> IO [FetchType]) -> Pipe ReplyType FetchType IO ()
 toPipeline old = CM.forever $ do
     a <- await
     b <- liftIO $ old a

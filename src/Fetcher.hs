@@ -48,7 +48,7 @@ fetchWaitTime = 1
 
 
 -- TODO: restart if the exception kills -- main.hs: InvalidUrlException "/ggmain/doublespreads/extrabits/Gil.jpg" "Invalid URL"
-fetch :: [CH.Cookie] -> TBMChan (FetchType a) -> TBMChan (ReplyType a) -> IO ()
+fetch :: [CH.Cookie] -> TBMChan FetchType -> TBMChan ReplyType -> IO ()
 fetch c i o = withSocketsDo $ E.bracket
     (CH.newManager CH.conduitManagerSettings)
     CH.closeManager
@@ -64,7 +64,7 @@ conduitFetcher :: (
     MonadBaseControl IO m,
     MonadResource m,
     Failure HttpException m
-    ) => [CH.Cookie] -> Manager -> TBMChan (FetchType a) -> TBMChan (ReplyType a) -> m ()
+    ) => [CH.Cookie] -> Manager -> TBMChan FetchType -> TBMChan ReplyType -> m ()
 conduitFetcher c m i o = CT.sourceTBMChan i $= CL.mapMaybeM (fetcher c m) $$ CT.sinkTBMChan o True
 
 
@@ -72,7 +72,7 @@ conduitFetcherList :: (
     MonadBaseControl IO m,
     MonadResource m,
     Failure HttpException m
-    ) => [CH.Cookie] -> Manager -> [FetchType a] -> m [ReplyType a]
+    ) => [CH.Cookie] -> Manager -> [FetchType] -> m [ReplyType]
 conduitFetcherList c m i = CL.sourceList i $= CL.mapMaybeM (fetcher c m) $$ CL.consume
 
 
@@ -80,10 +80,10 @@ fetcher :: (
     MonadBaseControl IO m,
     MonadResource m,
     Failure HttpException m
-    ) => [CH.Cookie] -> Manager -> FetchType a -> m (Maybe (ReplyType a))
-fetcher c m (Webpage u cached t) = do
+    ) => [CH.Cookie] -> Manager -> FetchType -> m (Maybe ReplyType)
+fetcher c m (Webpage u cached) = do
     reply <- fetchSource c m cached u
-    return $ Just (WebpageReply reply t)
+    return $ Just (WebpageReply reply)
 fetcher c m (Image u f) = do
     -- Stream to disk
     fetchToDisk c m u (comicTagToFilePath f)

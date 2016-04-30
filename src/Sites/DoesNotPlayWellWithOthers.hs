@@ -22,14 +22,13 @@ import Sites.Util (toPipeline)
 doesNotPlayWellWithOthers = Comic
     { comicName = "Does Not Play Well With Others"
     , seedPage = "http://www.doesnotplaywellwithothers.com/comics/pwc-000f"
-    , seedType = undefined
     , seedCache = Always
     , pageParse = toPipeline dnpwwoPageParse
     , cookies = []
     }
 
-dnpwwoPageParse :: ReplyType t -> IO [FetchType t]
-dnpwwoPageParse (WebpageReply html _) = do
+dnpwwoPageParse :: ReplyType -> IO [FetchType]
+dnpwwoPageParse (WebpageReply html) = do
     let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
     next <- runX $ doc //> nextPage
     img <- runX $ doc //> comic
@@ -39,7 +38,7 @@ dnpwwoPageParse (WebpageReply html _) = do
     mapM_ putStrLn img
     mapM_ putStrLn next
 
-    return $ map (\a -> Webpage a Always undefined) next ++ map (\a -> Image a $ comicFileName a) img
+    return $ map (\a -> Webpage a Always) next ++ map (\a -> Image a $ comicFileName a) img
 
    where
     nextPage = hasName "a" >>> hasAttrValue "class" (isInfixOf "navi-next") >>> hasAttr "href" >>> getAttrValue "href"

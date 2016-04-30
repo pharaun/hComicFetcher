@@ -9,14 +9,14 @@ import qualified Data.ByteString.Lazy as BL
 import Text.HTML.TagSoup hiding (parseTags, renderTags)
 import Text.HTML.TagSoup.Fast
 
+import Control.Monad
+import Control.Monad.IO.Class
+import Pipes (Pipe)
+
 -- Local imports
 import Types
 import Sites.Util (toPipeline)
-
--- Tags
-data CTag = Initial -- The initial page
-         | Chp ComicTag -- Specific chapter
-         | Page ComicTag
+import Interpreter
 
 rootUrl = "http://denizensattention.smackjeeves.com"
 firstChapter = "/chapters/81551/part-one-a-dark-beginning/"
@@ -27,14 +27,14 @@ firstChapter = "/chapters/81551/part-one-a-dark-beginning/"
 denizensAttention = Comic
     { comicName = "Denizens Attention"
     , seedPage = rootUrl ++ firstChapter
-    , seedType = Initial
     , seedCache = Always
-    , pageParse = toPipeline denizensAttentionPageParse
+    , pageParse = denizensAttentionPageParse
     , cookies = []
     }
 
-denizensAttentionPageParse :: ReplyType CTag -> IO [FetchType CTag]
-denizensAttentionPageParse (WebpageReply pg Initial) = do
+denizensAttentionPageParse :: Pipe ReplyType FetchType IO ()
+denizensAttentionPageParse = runWebFetchT $ do
+    pg <- fetchSeedpage
     let page = parseTagsT $ BL.toStrict pg
 
     -- Parse out a list of chapters
@@ -47,44 +47,45 @@ denizensAttentionPageParse (WebpageReply pg Initial) = do
             head $
             sections (~== "<option class=jumpbox_chapter>") page)
 
-    print chp
-    putStrLn ""
+    (liftIO . print) chp
+    debug ""
 
     -- TODO: add in the chapter name here as well
-    return $ map toChp chp
+    forM_ (map toChp chp) (\(url, ct) -> do
 
-denizensAttentionPageParse (WebpageReply pg (Chp ct)) = do
-    let page = parseTagsT $ BL.toStrict pg
+        pg <- fetchWebpage [(url, Always)]
+        let page = parseTagsT $ BL.toStrict pg
 
-    -- Parse out a list of pages
-    let pages = (
-            zip [1..] $
-            map (fromAttrib $ T.pack "value") $
-            filter (~== "<option>") $
-            takeWhile (~/= "</optgroup>") $
-            dropWhile (~/= "<option class=jumpbox_page>") page)
+        -- Parse out a list of pages
+        let pages = (
+                zip [1..] $
+                map (fromAttrib $ T.pack "value") $
+                filter (~== "<option>") $
+                takeWhile (~/= "</optgroup>") $
+                dropWhile (~/= "<option class=jumpbox_page>") page)
 
-    print pages
-    putStrLn ""
+        (liftIO . print) pages
+        debug ""
 
-    return $ map (toPage ct) pages
+        forM_ (map (toPage ct) pages) (\(url, ct) -> do
+            pg <- fetchWebpage [(url, Always)]
+            let page = parseTagsT $ BL.toStrict pg
 
-denizensAttentionPageParse (WebpageReply pg (Page ct)) = do
-    let page = parseTagsT $ BL.toStrict pg
+            let img = (
+                    (fromAttrib $ T.pack "src") $
+                    head $
+                    filter (~== "<img id=comic_image>") page)
 
-    let img = (
-            (fromAttrib $ T.pack "src") $
-            head $
-            filter (~== "<img id=comic_image>") page)
+            (liftIO . print) img
+            debug ""
 
-    print img
-    putStrLn ""
-
-    return [Image (T.unpack img) ct]
+            fetchImage (T.unpack img) ct
+            )
+        )
 
 
-toChp :: (Integer, T.Text) -> FetchType CTag
-toChp (chp, url) = Webpage (rootUrl ++ T.unpack url) Always (Chp $ ComicTag (T.pack "Denizens Attention") Nothing Nothing (Just $ UnitTag [StandAlone $ Digit chp Nothing Nothing Nothing] Nothing) Nothing)
+toChp :: (Integer, T.Text) -> (String, ComicTag)
+toChp (chp, url) = ((rootUrl ++ T.unpack url), (ComicTag (T.pack "Denizens Attention") Nothing Nothing (Just $ UnitTag [StandAlone $ Digit chp Nothing Nothing Nothing] Nothing) Nothing))
 
-toPage :: ComicTag -> (Integer, T.Text) -> FetchType CTag
-toPage ct (page, url) = Webpage (rootUrl ++ T.unpack url) Always (Page ct{ctFileName = Just $ T.justifyRight 7 '0' $ T.pack (show page ++ ".png")})
+toPage :: ComicTag -> (Integer, T.Text) -> (String, ComicTag)
+toPage ct (page, url) = ((rootUrl ++ T.unpack url), (ct{ctFileName = Just $ T.justifyRight 7 '0' $ T.pack (show page ++ ".png")}))

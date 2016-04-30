@@ -23,14 +23,13 @@ import Sites.Util
 girlGenius = Comic
     { comicName = "Girl Genius"
     , seedPage = "http://www.girlgeniusonline.com/comic.php?date=20021104"
-    , seedType = undefined
     , seedCache = Always
     , pageParse = toPipeline girlGeniusPageParse
     , cookies = []
     }
 
-girlGeniusPageParse :: ReplyType t -> IO [FetchType t]
-girlGeniusPageParse (WebpageReply html _) = do
+girlGeniusPageParse :: ReplyType -> IO [FetchType]
+girlGeniusPageParse (WebpageReply html) = do
     let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
     next <- runX $ doc //> nextPage
     img <- runX $ doc //> comic
@@ -41,7 +40,7 @@ girlGeniusPageParse (WebpageReply html _) = do
     mapM_ putStrLn img
     mapM_ putStrLn next
 
-    return $ map (\a -> Webpage a Always undefined) next ++ map (\a -> Image a $ comicFileName vol a) img
+    return $ map (\a -> Webpage a Always) next ++ map (\a -> Image a $ comicFileName vol a) img
 
    where
     nextPage = hasName "td" >>> hasAttrValue "valign" (== "top") //> (hasName "a" </ (hasName "img" >>> hasAttrValue "alt" (== "The Next Comic"))) >>> getAttrValue "href"

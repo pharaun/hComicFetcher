@@ -26,18 +26,18 @@ data WebFetchI a where
 
 type WebFetchT m a = ProgramT WebFetchI m a
 
-runWebFetchT :: (MonadIO m, Monad m) => WebFetchT (Pipe (ReplyType t) (FetchType t) m) () -> Pipe (ReplyType t) (FetchType t) m ()
+runWebFetchT :: (MonadIO m, Monad m) => WebFetchT (Pipe ReplyType FetchType m) () -> Pipe ReplyType FetchType m ()
 runWebFetchT = eval <=< viewT
   where
-    eval :: (MonadIO m, Monad m) => ProgramViewT WebFetchI (Pipe (ReplyType t) (FetchType t) m) () -> Pipe (ReplyType t) (FetchType t) m ()
+    eval :: (MonadIO m, Monad m) => ProgramViewT WebFetchI (Pipe ReplyType FetchType m) () -> Pipe ReplyType FetchType m ()
     eval (Return _) = return ()
 
     -- TODO: need to find a way to make this only run once
     eval (FetchSeedpage :>>= k) =
-        await >>= (\(WebpageReply b _) -> runWebFetchT (k b))
+        await >>= (\(WebpageReply b) -> runWebFetchT (k b))
 
     eval (FetchWebpage us :>>= k) =
-        forM_ us (\(u, c) -> (yield (Webpage u c undefined)) >> await >>= \(WebpageReply b _) -> runWebFetchT (k b))
+        forM_ us (\(u, c) -> (yield (Webpage u c)) >> await >>= \(WebpageReply b) -> runWebFetchT (k b))
 
     eval (FetchImage u ct :>>= k) =
         (yield (Image u ct)) >> runWebFetchT (k ())

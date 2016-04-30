@@ -104,7 +104,7 @@ data SubDigit = DotSubDigit (Maybe Integer) T.Text
 -- Data type of the url and any additional info needed
 type Url = String
 
-data ReplyType a = WebpageReply UL.ByteString a
+data ReplyType = WebpageReply UL.ByteString
     deriving (Show)
 
 data Cached = Never | Always | Future UTCTime
@@ -112,7 +112,7 @@ data Cached = Never | Always | Future UTCTime
 
 -- TODO: define caching policy
 --  - For now caching is defined always by the caller
-data FetchType a = Webpage Url Cached a
+data FetchType = Webpage Url Cached
                  | Image Url ComicTag -- TODO: this is probably wrong type - We probably want FPO.FilePath
 
 
@@ -154,17 +154,16 @@ data FetchType a = Webpage Url Cached a
 --      one chp fetcher per line in that list
 
 -- Parameterized type
-data Comic t = Comic
+data Comic = Comic
     { comicName :: String
 
     -- Seed page/type for kickstarting the parser/fetcher
     , seedPage :: String
-    , seedType :: t -- TAG
     , seedCache :: Cached
 
     -- Page parser, Parse a page and return a list of stuff to fetch,
     -- Pipeline parser (takes an input stream and output stream of stuff to fetch
-    , pageParse :: (Pipe (ReplyType t) (FetchType t) IO ())
+    , pageParse :: Pipe ReplyType FetchType IO ()
 
     -- Cookies
     , cookies :: [CH.Cookie]

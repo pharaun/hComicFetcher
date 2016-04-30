@@ -74,15 +74,15 @@ main = do
 --
 -- Backward Compat parser target
 --
-pipelineTarget :: Comic a -> IO ()
-pipelineTarget Comic{seedPage=seedPage', seedType=seedType', seedCache=seedCache', pageParse=parse, cookies=cookie} = do
+pipelineTarget :: Comic -> IO ()
+pipelineTarget Comic{seedPage=seedPage', seedCache=seedCache', pageParse=parse, cookies=cookie} = do
     -- Queues for processing stuff
     -- TODO: look into tweaking this and making the indexed parser not deadlock the whole thing... if there's more to add to the queue than can be processed
     toFetch <- atomically $ newTBMChan 10000
     toReturn <- atomically $ newTBMChan 10000
 
     -- Seed with an initial page
-    atomically $ writeTBMChan toFetch $ Webpage seedPage' seedCache' seedType'
+    atomically $ writeTBMChan toFetch $ Webpage seedPage' seedCache'
 
     -- Start the fetcher
     threadId <- forkIO $ fetch cookie toFetch toReturn
@@ -99,14 +99,14 @@ pipelineTarget Comic{seedPage=seedPage', seedType=seedType', seedCache=seedCache
     -- We're done kill it
     killThread threadId
 
-chanProducer :: (MonadIO m) => TBMChan (ReplyType a) -> Producer (ReplyType a) m ()
+chanProducer :: (MonadIO m) => TBMChan ReplyType -> Producer ReplyType m ()
 chanProducer i = do
     r <- liftIO $ atomically $ readTBMChan i
     case r of
         Nothing -> return ()
         Just x  -> yield x >> chanProducer i
 
-chanConsumer :: (MonadIO m) => TBMChan (FetchType a) -> Consumer (FetchType a) m ()
+chanConsumer :: (MonadIO m) => TBMChan FetchType -> Consumer FetchType m ()
 chanConsumer o = CM.forever $ do
     r <- await
     liftIO $ atomically $ writeTBMChan o r

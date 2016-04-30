@@ -14,44 +14,80 @@ import qualified Data.ByteString.Lazy.UTF8 as UL
 import qualified Data.ByteString.UTF8 as US
 
 import Control.Exception (throw)
+import Control.Monad
+import Control.Monad.IO.Class
+import Pipes (Pipe)
 
 -- Local imports
 import Types
 import Sites.Util
+import Interpreter
 
-
--- TODO: errant story only
-data Tag = VolIndex -- Volume Index page
-         | Chapter ComicTag -- Entire chapters page
-         | Page ComicTag -- single comic page
 
 -- Errant Story
-errantStory :: Comic Tag
+errantStory :: Comic
 errantStory = Comic
     { comicName = "Errant Story"
     , seedPage = "http://www.errantstory.com"
-    , seedType = VolIndex
     , seedCache = Always
-    , pageParse = toPipeline errantStoryPageParse
+    , pageParse = errantStoryPageParse
     , cookies = []
     }
 
-errantStoryPageParse :: ReplyType Tag -> IO [FetchType Tag]
-errantStoryPageParse (WebpageReply html VolIndex) = do
+errantStoryPageParse :: Pipe ReplyType FetchType IO ()
+errantStoryPageParse = runWebFetchT $ do
+    debug "Seed page"
+    html <- fetchSeedpage
+
     let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
-    index <- runX $ doc //> indexList
+    index <- liftIO (runX $ doc //> indexList)
 
     -- TODO: have a pre-process step for processing the parsing results into a useful list for dumping into TBMChans
     let defaultErrantStory = ComicTag (T.pack "errant_story") Nothing Nothing Nothing Nothing
     let list = buildUrlAndComicTagMapping defaultErrantStory index
 
     -- Dump list of Comic page fetched
-    putStrLn "Chp list:"
-    mapM_ print list
+    debug "Chp list:"
+    mapM_ (liftIO . print) list
 
-    return $ map (\(u, p) -> Webpage u Always (Chapter p)) list
+    debug "Parse chapter"
+    forM_ list (\(url, ct) -> processChapterParse url ct)
 
   where
+    processChapterParse url ct = do
+        html <- fetchWebpage [(url, Always)]
+
+        let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
+        chp <- liftIO (runX $ doc //> chapterList)
+        next <- liftIO (runX $ doc //> chapterNextPage)
+
+        -- Do we have any comic we want to store to disk?
+        debug "Chp list:"
+        mapM_ (liftIO . print) chp
+
+        debug "Next archive:"
+        mapM_ (liftIO . print) next
+
+        -- TODO:
+        --  1. Do something with the name of the page (Chapter 42: foobar) (not on all pages unfortunately)
+        debug "Parse chapter2"
+        forM_ next (\url' -> processChapterParse url' ct)
+
+        debug "Parse page"
+        forM_ chp (\url' -> processPageParse (fst url') ct)
+
+    processPageParse url ct = do
+        html <- fetchWebpage [(url, Always)]
+
+        let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
+        img <- liftIO (runX $ doc //> comic)
+
+        -- Do we have any comic we want to store to disk?
+        debug "Fetched Urls:"
+        mapM_ (liftIO . putStrLn) img
+
+        forM_ img (\url' -> fetchImage url' (comicTagFileName ct url'))
+
     indexList =
         hasName "select"
         >>> hasAttrValue "id" (isInfixOf "cat")
@@ -90,23 +126,6 @@ errantStoryPageParse (WebpageReply html VolIndex) = do
     levelToComicTagMapping parent (url, ("level-1", name)) = (url, parent {ctStoryName = Just $ T.pack name})
     levelToComicTagMapping parent content = throw $ DebugException "levelToComicTagMapping" ("Parent: " ++ show parent ++ " - Content: " ++ show content)
 
-errantStoryPageParse (WebpageReply html (Chapter ct)) = do
-    let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
-    chp <- runX $ doc //> chapterList
-    next <- runX $ doc //> chapterNextPage
-
-    -- Do we have any comic we want to store to disk?
-    putStrLn "Chp list:"
-    mapM_ print chp
-
-    putStrLn "Next archive:"
-    mapM_ print next
-
-    -- TODO:
-    --  1. Do something with the name of the page (Chapter 42: foobar) (not on all pages unfortunately)
-    return $ map (\a -> Webpage a Always (Chapter ct)) next ++ map (\a -> Webpage (fst a) Always (Page ct)) chp
-
-   where
     chapterList =
         hasName "div"
         >>> hasAttrValue "class" (isInfixOf "comicarchiveframe")
@@ -132,17 +151,6 @@ errantStoryPageParse (WebpageReply html (Chapter ct)) = do
         >>> hasAttr "href"
         >>> getAttrValue "href"
 
-errantStoryPageParse (WebpageReply html (Page ct)) = do
-    let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
-    img <- runX $ doc //> comic
-
-    -- Do we have any comic we want to store to disk?
-    putStrLn "Fetched Urls:"
-    mapM_ putStrLn img
-
-    return (map (\a -> Image a $ comicTagFileName ct a) img)
-
-   where
     comic = hasAttrValue "id" (== "comic") >>> hasName "div" //> hasName "img" >>> hasAttr "src" >>> getAttrValue "src"
     comicTagFileName ctt url = ctt{ctFileName = Just $ last $ decodePathSegments $ US.fromString url}
 

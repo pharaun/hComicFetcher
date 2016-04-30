@@ -26,14 +26,13 @@ import Sites.Util
 gunnerkrigCourt = Comic
     { comicName = "Gunnerkrigg Court"
     , seedPage = "http://www.gunnerkrigg.com/archives/"
-    , seedType = undefined
     , seedCache = Always
     , pageParse = toPipeline gunnerkrigCourtPageParse
     , cookies = []
     }
 
-gunnerkrigCourtPageParse :: ReplyType t -> IO [FetchType t]
-gunnerkrigCourtPageParse (WebpageReply html _) = do
+gunnerkrigCourtPageParse :: ReplyType -> IO [FetchType]
+gunnerkrigCourtPageParse (WebpageReply html) = do
     let doc = readString [withParseHTML yes, withWarnings no] $ UL.toString html
     chpPages <- runX $ chapterPage doc
 
