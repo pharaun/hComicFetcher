@@ -37,13 +37,13 @@ runWebFetchT = eval <=< viewT
         await >>= (\(WebpageReply b) -> runWebFetchT (k b))
 
     eval (FetchWebpage us :>>= k) =
-        forM_ us (\(u, c) -> (yield (Webpage u c)) >> await >>= \(WebpageReply b) -> runWebFetchT (k b))
+        forM_ us (\(u, c) -> yield (Webpage u c) >> await >>= \(WebpageReply b) -> runWebFetchT (k b))
 
     eval (FetchImage u ct :>>= k) =
-        (yield (Image u ct)) >> runWebFetchT (k ())
+        yield (Image u ct) >> runWebFetchT (k ())
 
     eval (Debug s :>>= k) =
-        (liftIO $ print s) >> runWebFetchT (k ())
+        liftIO (print s) >> runWebFetchT (k ())
 
 fetchSeedpage :: WebFetchT m UL.ByteString
 fetchSeedpage = singleton FetchSeedpage

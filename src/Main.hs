@@ -88,12 +88,12 @@ pipelineTarget Comic{seedPage=seedPage', seedCache=seedCache', pageParse=parse, 
     threadId <- forkIO $ fetch cookie toFetch toReturn
 
     -- Pipeline parser
-    runEffect $ (chanProducer toReturn) >-> parse >-> (chanConsumer toFetch)
+    runEffect $ chanProducer toReturn >-> parse >-> chanConsumer toFetch
 
     -- TODO: Wait till queue is empty
     -- - Hacky, need to have a check from queue empty
     -- - Fetcher is done (downloading + write to disk)
-    untilM_ (liftIO $ threadDelay $ 1000000) (atomically $ isEmptyTBMChan toFetch)
+    untilM_ (liftIO $ threadDelay 1000000) (atomically $ isEmptyTBMChan toFetch)
     liftIO $ threadDelay $ 1000000 * 10 -- Wait till image is written to disk
 
     -- We're done kill it
