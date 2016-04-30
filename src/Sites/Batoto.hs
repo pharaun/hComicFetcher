@@ -63,11 +63,11 @@ batotoPageParse = runWebFetchT $ do
     debug "Parse First Page"
     forM_ next (\(url, ct) -> do
         debug url
-        html <- fetchWebpage [(url, Always)]
+        html' <- fetchWebpage [(url, Always)]
 
-        let doc = readString [withParseHTML yes, withWarnings no, withTagSoup] $ UL.toString html
-        img <- liftIO (runX $ doc //> comic)
-        otherPagesP <- liftIO (runX $ doc >>> otherPages)
+        let doc' = readString [withParseHTML yes, withWarnings no, withTagSoup] $ UL.toString html'
+        img <- liftIO (runX $ doc' //> comic)
+        otherPagesP <- liftIO (runX $ doc' >>> otherPages)
 
         -- Do we have any comic we want to store to disk?
         debug "img url"
@@ -82,16 +82,16 @@ batotoPageParse = runWebFetchT $ do
         debug "Fetch next pages"
         forM_ otherPagesP (\url' -> do
             debug url
-            html <- fetchWebpage [(url', Always)]
+            html'' <- fetchWebpage [(url', Always)]
 
-            let doc = readString [withParseHTML yes, withWarnings no, withTagSoup] $ UL.toString html
-            img <- liftIO (runX $ doc //> comic)
+            let doc'' = readString [withParseHTML yes, withWarnings no, withTagSoup] $ UL.toString html''
+            img' <- liftIO (runX $ doc'' //> comic)
 
             -- Do we have any comic we want to store to disk?
             debug "img url"
-            mapM_ (liftIO . print) img
+            mapM_ (liftIO . print) img'
 
-            forM_ img (\url'' -> fetchImage url'' (comicTagFileName ct url''))
+            forM_ img' (\url'' -> fetchImage url'' (comicTagFileName ct url''))
             )
         )
 

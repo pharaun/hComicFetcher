@@ -15,7 +15,6 @@ import Pipes (Pipe)
 
 -- Local imports
 import Types
-import Sites.Util (toPipeline)
 import Interpreter
 
 rootUrl = "http://denizensattention.smackjeeves.com"
@@ -53,8 +52,8 @@ denizensAttentionPageParse = runWebFetchT $ do
     -- TODO: add in the chapter name here as well
     forM_ (map toChp chp) (\(url, ct) -> do
 
-        pg <- fetchWebpage [(url, Always)]
-        let page = parseTagsT $ BL.toStrict pg
+        pg' <- fetchWebpage [(url, Always)]
+        let page' = parseTagsT $ BL.toStrict pg'
 
         -- Parse out a list of pages
         let pages = (
@@ -62,24 +61,24 @@ denizensAttentionPageParse = runWebFetchT $ do
                 map (fromAttrib $ T.pack "value") $
                 filter (~== "<option>") $
                 takeWhile (~/= "</optgroup>") $
-                dropWhile (~/= "<option class=jumpbox_page>") page)
+                dropWhile (~/= "<option class=jumpbox_page>") page')
 
         (liftIO . print) pages
         debug ""
 
-        forM_ (map (toPage ct) pages) (\(url, ct) -> do
-            pg <- fetchWebpage [(url, Always)]
-            let page = parseTagsT $ BL.toStrict pg
+        forM_ (map (toPage ct) pages) (\(url', ct') -> do
+            pg'' <- fetchWebpage [(url', Always)]
+            let page'' = parseTagsT $ BL.toStrict pg''
 
             let img = (
                     (fromAttrib $ T.pack "src") $
                     head $
-                    filter (~== "<img id=comic_image>") page)
+                    filter (~== "<img id=comic_image>") page'')
 
             (liftIO . print) img
             debug ""
 
-            fetchImage (T.unpack img) ct
+            fetchImage (T.unpack img) ct'
             )
         )
 

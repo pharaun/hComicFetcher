@@ -2,7 +2,6 @@ module Sites.FeyWinds
     ( feyWinds
     ) where
 
-import Control.Applicative
 import Control.Monad
 import Data.Maybe (catMaybes)
 import Network.HTTP.Types.URI (decodePathSegments)

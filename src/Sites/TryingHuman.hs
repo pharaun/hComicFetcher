@@ -58,14 +58,14 @@ tryingHumanPageParse = runWebFetchT $ do
                 dropWhile (~/= "<div id=maincontent>") page))
 
     forM_ (buildTreeUrl subset) (\(url, pg, ct) -> do
-        html <- fetchWebpage [(url, Always)]
+        html' <- fetchWebpage [(url, Always)]
 
-        let page = parseTagsT $ BL.toStrict html
+        let page' = parseTagsT $ BL.toStrict html'
 
         let img = (
                 (fromAttrib $ T.pack "src") $
                 head $
-                filter (~== "<img id=comic>") page)
+                filter (~== "<img id=comic>") page')
 
         (liftIO . print) img
         debug ""

@@ -23,7 +23,6 @@ import Text.XML.Expat.Tree
 
 -- Local imports
 import Types
-import Sites.Util (toPipeline)
 import Interpreter
 
 --
@@ -50,22 +49,22 @@ freakAngelsPageParse = runWebFetchT $ do
            . children . traverse . named "li"
            . children . traverse . to urlAndName . _Just
 
-    debug "Parsing books"
+    debug ("Parsing books" :: String)
     liftIO . print $ ul
-    debug ""
 
-    forM_ (map bookNameToComicTag $ DL.filter (BS.isInfixOf "cat" . snd) ul) (\(url, notes, ct) -> do
-        pg <- fetchWebpage [(url, Always)]
+    -- TODO: Handle Notes only page
+    forM_ (map bookNameToComicTag $ DL.filter (BS.isInfixOf "cat" . snd) ul) (\(url, _, ct) -> do
+        pg' <- fetchWebpage [(url, Always)]
 
-        let page = BL.toStrict pg
+        let page' = BL.toStrict pg'
 
         -- Fetch the link to each Episode (filter out notes)
         --  div.archive_comic:nth-child(7) > a:nth-child(1)
-        let name = page ^.. typedHTML . to allNodes
+        let name = page' ^.. typedHTML . to allNodes
                  . traverse . named "div" . parameterized "class" "archive_comic"
                  . children . ix 1 . children . ix 0 . text
 
-        let href = page ^.. typedHTML . to allNodes
+        let href = page' ^.. typedHTML . to allNodes
                  . traverse . named "div" . parameterized "class" "archive_comic"
                  . children . traverse . named "p"
                  . children . traverse . named "a"
@@ -74,18 +73,17 @@ freakAngelsPageParse = runWebFetchT $ do
         -- TODO: implement something to handle non-comic page page (notes)
         let titleHref = filter (BS.isPrefixOf "FreakAngels: Episode" . fst) $ zip name href
 
-        debug "Parsing Episode"
+        debug ("Parsing Episode" :: String)
         liftIO . print $ titleHref
-        debug ""
 
-        forM_ (map (bookEpisodeToComicTag ct) titleHref) (\(url, page1, ct) -> do
-            pg <- fetchWebpage [(url, Always)]
+        forM_ (map (bookEpisodeToComicTag ct) titleHref) (\(url', page1, ct') -> do
+            pg'' <- fetchWebpage [(url', Always)]
 
-            let page = BL.toStrict pg
+            let page'' = BL.toStrict pg''
 
             -- Find the url to each page
             --  .navpagenav > li:nth-child(2)
-            let pages = page ^.. typedHTML . to allNodes
+            let pages = page'' ^.. typedHTML . to allNodes
                       . traverse . named "ul" . parameterized "class" "navpagenav"
                       . children . ix 1
                       . children . traverse . named "span"
@@ -95,29 +93,27 @@ freakAngelsPageParse = runWebFetchT $ do
             -- TODO: Apparently page 7 on some comic can be special
             let pages' = page1 : pages
 
-            debug "Parsing Pages"
+            debug ("Parsing Pages" :: String)
             liftIO . print $ pages
-            debug ""
 
-            forM_ pages' (\url -> do
-                pg <- fetchWebpage [(US.toString url, Always)]
+            forM_ pages' (\url'' -> do
+                pg''' <- fetchWebpage [(US.toString url'', Always)]
 
-                let page = BL.toStrict pg
+                let page''' = BL.toStrict pg'''
 
                 -- Fetch the image to download to disk
                 --  .entry_page > p:nth-child(1) > img:nth-child(1)
-                let img = page ^. typedHTML . to allNodes
+                let img = page''' ^. typedHTML . to allNodes
                         . traverse . named "div" . parameterized "class" "entry_page"
                         . children . ix 1
                         . children . traverse . named "img"
                         . attributes . to (lookup "src") . _Just
 
-                debug "Parsing Image"
+                debug ("Parsing Image" :: String)
                 liftIO . print $ img
-                debug ""
 
                 -- TODO: implement something to handle non-comic page page (notes)
-                if BS.null img then (debug "Dropping") else (fetchImage (US.toString img) ct{ctFileName = Just $ last $ decodePathSegments $ img})
+                if BS.null img then (debug ("Dropping" :: String)) else (fetchImage (US.toString img) ct'{ctFileName = Just $ last $ decodePathSegments $ img})
                 )
             )
         )
@@ -134,6 +130,7 @@ urlAndName (Element _ a c) = case lookup "href" a of
     Just url -> case c of
         [Text x]  -> Just (x, url)
         _         -> Nothing
+urlAndName _ = Nothing
 
 
 -- TODO clean this up more nicely (Using my Text to number parsing)

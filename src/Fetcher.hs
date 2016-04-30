@@ -33,8 +33,6 @@ import qualified System.FilePath as FP
 
 import Crypto.Hash (digestToHexByteString, hash, Digest, SHA512)
 
-import qualified Data.List as DL
-
 
 -- Local types
 import Types
@@ -66,14 +64,6 @@ conduitFetcher :: (
     Failure HttpException m
     ) => [CH.Cookie] -> Manager -> TBMChan FetchType -> TBMChan ReplyType -> m ()
 conduitFetcher c m i o = CT.sourceTBMChan i $= CL.mapMaybeM (fetcher c m) $$ CT.sinkTBMChan o True
-
-
-conduitFetcherList :: (
-    MonadBaseControl IO m,
-    MonadResource m,
-    Failure HttpException m
-    ) => [CH.Cookie] -> Manager -> [FetchType] -> m [ReplyType]
-conduitFetcherList c m i = CL.sourceList i $= CL.mapMaybeM (fetcher c m) $$ CL.consume
 
 
 fetcher :: (

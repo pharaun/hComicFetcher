@@ -26,8 +26,7 @@ import qualified Data.Text as T
 -- Parsec
 import Text.Parsec
 import Data.Functor.Identity (Identity)
-import Control.Applicative ((*>), (<*), (<*>), (<$>), (<$), pure, liftA)
-import Data.Monoid (mconcat)
+import Control.Applicative (liftA)
 import Control.Monad
 
 -- Local Imports

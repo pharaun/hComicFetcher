@@ -77,20 +77,20 @@ titles url = choice
     [ try (do
         chp <- numParse
         _ <- char '.'
-        pg <- numParse
+        _ <- numParse -- pg
         eof
         return $ mainStory chp url)
 
     , try (do
         chp <- numParse
         _ <- char '.'
-        pg <- numParse
+        _ <- numParse -- pg
         _ <- space
         _ <- char '–'
         _ <- space
-        chp' <- numParse
+        _ <- numParse -- chp'
         _ <- char '.'
-        pg' <- numParse
+        _ <- numParse -- pg'
         eof
         return $ mainStory chp url)
 
